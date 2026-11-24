@@ -1,0 +1,64 @@
+{
+  "_설명": "build_profile.py 가 읽는 열 이름 사전과 값 사전. 새 표기가 생기면 여기에만 추가하면 됩니다.",
+
+  "ignore_columns": ["No", "번호", "순번"],
+
+  "columns": {
+    "participation": {
+      "이름": "name", "성함": "name", "성명": "name", "신청자명": "name",
+      "회사": "company", "소속": "company", "회사명": "company",
+      "직함": "title", "직책": "title", "직급": "title", "직급/직책": "title",
+      "이메일": "email", "메일 주소": "email", "E-mail": "email",
+      "사전 질문": "pre_question", "궁금한 점": "pre_question", "질문사항": "pre_question",
+      "참석": "attended", "출석": "attended", "출석여부": "attended",
+      "마케팅 수신 동의": "consent", "뉴스레터 수신": "consent", "수신동의 여부": "consent",
+      "비고": "note", "메모": "note"
+    },
+    "event": {
+      "행사 ID": "event_id", "행사명": "event_name", "개최일": "event_date", "유형": "event_type",
+      "신청 인원": "applied_count", "참석 인원": "attended_count",
+      "감사 메일 발송일": "thanks_mail_date", "설문 응답 수": "survey_count", "비고": "note"
+    },
+    "survey": {
+      "행사 ID": "event_id", "응답일": "response_date",
+      "Q1 만족도": "q1_satisfaction", "Q2 도움 정도": "q2_helpfulness", "Q3 추천 의향": "q3_recommend",
+      "Q4 도움이 된 내용": "q4_helpful_content", "Q5 듣고 싶은 주제": "q5_wanted_topic",
+      "Q6 도입 검토": "q6_adoption", "Q7 연락 희망": "q7_contact_wish", "Q8 이메일": "email"
+    },
+    "interaction": {
+      "행사 ID": "event_id", "이름": "name", "회사": "company", "연락일": "contact_date",
+      "방법": "method", "메모": "memo", "결과": "result"
+    },
+    "content": {
+      "번호": "content_id", "발행일": "published_date", "채널": "channel", "제목": "title",
+      "주제": "topic", "대상 독자": "audience", "링크": "url"
+    }
+  },
+
+  "_keywords_설명": "참가자 명단에서 ①② 로 못 맞춘 열에 위에서부터 차례로 적용. 값 검증에 실패하면 다음 후보로 넘어감. name 은 '회사명' 같은 열을 잘못 잡지 않도록 맨 뒤.",
+  "keywords": [
+    {"field": "email", "words": ["메일", "email"]},
+    {"field": "pre_question", "words": ["질문", "궁금"]},
+    {"field": "attended", "words": ["참석", "출석"]},
+    {"field": "consent", "words": ["동의", "수신"]},
+    {"field": "company", "words": ["회사", "소속"]},
+    {"field": "title", "words": ["직함", "직책", "직급"]},
+    {"field": "note", "words": ["비고", "메모"]},
+    {"field": "name", "words": ["이름", "성명"], "suffix": ["명"]}
+  ],
+
+  "values": {
+    "attended": {"참석": "Y", "O": "Y", "출석": "Y", "Y": "Y", "불참": "N", "X": "N", "결석": "N", "N": "N"},
+    "consent": {"동의": "Y", "Y": "Y", "예": "Y", "미동의": "N", "N": "N", "아니오": "N"},
+    "yes_no": {"예": "Y", "아니오": "N"},
+    "adoption": {"예": "Y", "검토 중": "REVIEW", "아니오": "N"}
+  },
+
+  "company_remove": ["(주)", "㈜", "주식회사"],
+
+  "required": {
+    "participation": ["event_id", "email", "name", "attended"]
+  },
+
+  "test_events": ["E07"]
+}

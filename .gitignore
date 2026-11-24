@@ -221,3 +221,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# 행사 데이터: 원본 엑셀과 결과물은 올리지 않음 (테스트 명단만 예외)
+data/raw/*.xlsx
+!data/raw/01_참가자명단_E07_테스트행사.xlsx
+data/processed/
+.DS_Store
