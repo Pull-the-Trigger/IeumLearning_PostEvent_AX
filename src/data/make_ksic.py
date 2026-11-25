@@ -1,7 +1,7 @@
-"""한국표준산업분류(KSIC) 제11차 엑셀 → src/ksic.json (대분류 21개, 중분류 77개).
+"""한국표준산업분류(KSIC) 제11차 엑셀 → src/data/ksic.json (대분류 21개, 중분류 77개).
 
 실행 (원본 엑셀이 바뀔 때만 한 번):
-    python src/make_ksic.py
+    python src/data/make_ksic.py
 """
 import json
 import os
@@ -10,9 +10,9 @@ import sys
 
 import pandas as pd
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # 저장소 루트 (src/data/ 의 두 단계 위)
 SRC = os.path.join(ROOT, "data", "ref", "한국표준산업분류_제11차_분류체계.xlsx")
-OUT = os.path.join(ROOT, "src", "ksic.json")
+OUT = os.path.join(ROOT, "src", "data", "ksic.json")
 SHEET = "11차개정한국표준산업분류"  # 10차 시트는 무시
 SOURCE = ("한국표준산업분류 제11차 개정 (통계청 고시 제2024-2호, 2024-07-01 시행), "
           "통계분류포털 자료실 2024-06-26 게시본 / data/ref/한국표준산업분류_제11차_분류체계.xlsx")

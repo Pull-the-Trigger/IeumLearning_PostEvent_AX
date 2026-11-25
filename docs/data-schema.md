@@ -1,7 +1,7 @@
 # 표준 데이터 스키마
 
 이음러닝 행사 후속 관리용 원본 엑셀(`data/raw/`)을 아래 7개 표로 바꿉니다.
-변환 규칙은 `src/mapping.json`에 있고, 실행은 `src/build_profile.py`로 합니다.
+변환 규칙은 `src/data/mapping.json`에 있고, 실행은 `src/data/build_profile.py`로 합니다.
 
 - 사람은 **이메일**로 구분합니다 (소문자로 바꾸고 앞뒤 공백 제거). 이름은 동명이인이 있어서 키로 쓰지 않습니다.
 - 회사명은 `(주)`, `㈜`, `주식회사`, 띄어쓰기를 지워서 통일합니다 (`(주)동명메디칼` → `동명메디칼`).
@@ -52,20 +52,20 @@
 
 **KSIC 출처**: 한국표준산업분류 제11차 개정 (통계청 고시 제2024-2호, 2024-07-01 시행), 통계분류포털 자료실 2024-06-26 게시본
 (`data/ref/한국표준산업분류_제11차_분류체계.xlsx`의 "11차개정한국표준산업분류" 시트).
-`src/make_ksic.py`가 대분류 21개·중분류 77개만 뽑아 `src/ksic.json`으로 만듭니다 (개수가 다르면 멈춤).
+`src/data/make_ksic.py`가 대분류 21개·중분류 77개만 뽑아 `src/data/ksic.json`으로 만듭니다 (개수가 다르면 멈춤).
 
-**분류 방식** (`src/classify_industry.py`)
+**분류 방식** (`src/data/classify_industry.py`)
 
-1. **확정 사전** `src/industry_manual.json` — `{"동명화학": "20"}`처럼 회사 키 → 중분류 코드. 여기 있으면 그 값을 쓰고 `manual`, LLM은 부르지 않습니다. `""`은 "사람이 확인했지만 미분류".
-2. **LLM** — 기본 실행에서 `.env`에 `OPENAI_API_KEY`가 있으면 자동으로 (`--no-classify`로 끌 수 있음), 1에도 지난 결과(`src/industry_llm.json`)에도 없는 회사의 회사명+도메인을 50개씩 묶어 OpenAI API에 보내고 중분류 코드 하나만 고르게 합니다 (주된 사업 하나, 확신 없으면 빈칸). 결과는 `src/industry_llm.json`에 쌓여 다음 실행부터 LLM 없이 재사용되며 `llm`으로 표시됩니다. 대분류는 LLM에 묻지 않습니다.
-3. **사람이 수정** — 틀린 값은 `src/industry_manual.json`에 직접 고쳐 넣으면 다음 실행부터 반영됩니다 (확인용 화면은 없음).
+1. **확정 사전** `src/data/industry_manual.json` — `{"동명화학": "20"}`처럼 회사 키 → 중분류 코드. 여기 있으면 그 값을 쓰고 `manual`, LLM은 부르지 않습니다. `""`은 "사람이 확인했지만 미분류".
+2. **LLM** — 기본 실행에서 `.env`에 `OPENAI_API_KEY`가 있으면 자동으로 (`--no-classify`로 끌 수 있음), 1에도 지난 결과(`src/data/industry_llm.json`)에도 없는 회사의 회사명+도메인을 50개씩 묶어 OpenAI API에 보내고 중분류 코드 하나만 고르게 합니다 (주된 사업 하나, 확신 없으면 빈칸). 결과는 `src/data/industry_llm.json`에 쌓여 다음 실행부터 LLM 없이 재사용되며 `llm`으로 표시됩니다. 대분류는 LLM에 묻지 않습니다.
+3. **사람이 수정** — 틀린 값은 `src/data/industry_manual.json`에 직접 고쳐 넣으면 다음 실행부터 반영됩니다 (확인용 화면은 없음).
 
 **두 파일의 관계** (둘 다 처음엔 `{}`, 형식은 `{company_key: 중분류 코드}`로 같음, 둘 다 커밋 대상)
 
 | 순서 | 파일 | 누가 쓰나 | industry_source |
 |---|---|---|---|
-| 1 | `src/industry_manual.json` | 사람이 수정한 값, LLM 결과보다 우선 | `manual` |
-| 2 | `src/industry_llm.json` | 기본 실행의 LLM 분류 (LLM 결과를 쌓아 둠) | `llm` |
+| 1 | `src/data/industry_manual.json` | 사람이 수정한 값, LLM 결과보다 우선 | `manual` |
+| 2 | `src/data/industry_llm.json` | 기본 실행의 LLM 분류 (LLM 결과를 쌓아 둠) | `llm` |
 | 3 | 둘 다 없음 | | 빈칸 (미분류) |
 
 같은 회사가 두 파일에 다 있으면 `industry_manual.json`이 이깁니다. 그래서 LLM 결과를 고칠 때 `industry_llm.json`은 건드리지 않고 `industry_manual.json`에만 추가하면 됩니다.
@@ -160,10 +160,10 @@ pandas 2.x와 3.x 둘 다 됩니다 (2.3.3, 3.1.1에서 확인했고 결과 파�
 ```bash
 pip install pandas openpyxl
 pip install openai                       # 산업군 LLM 분류를 쓸 때만 필요
-python src/build_profile.py              # 변환 + 산업군 분류 + 통합 프로필 + 확인 출력
-python src/build_profile.py --no-classify  # LLM 산업군 분류 없이 실행
-python src/build_profile.py --make-test  # 테스트 명단(E07)을 다시 만들 때
-python src/make_ksic.py                  # KSIC 엑셀이 바뀌었을 때만 (src/ksic.json 재생성)
+python src/data/build_profile.py              # 변환 + 산업군 분류 + 통합 프로필 + 확인 출력
+python src/data/build_profile.py --no-classify  # LLM 산업군 분류 없이 실행
+python src/data/build_profile.py --make-test  # 테스트 명단(E07)을 다시 만들 때
+python src/data/make_ksic.py                  # KSIC 엑셀이 바뀌었을 때만 (src/data/ksic.json 재생성)
 ```
 
 - 기본 실행은 `industry_manual.json`·`industry_llm.json` 어디에도 없는 회사만 LLM으로 분류해 `industry_llm.json`에 쌓습니다.

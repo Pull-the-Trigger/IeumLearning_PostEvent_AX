@@ -1,9 +1,9 @@
 """이음러닝 행사 후속 관리: 원본 엑셀 → 표준 스키마 → 이메일 기준 통합 프로필.
 
 실행:
-    python src/build_profile.py              # 변환 + 산업군 분류(키가 있을 때) + 통합 프로필 + 확인 출력
-    python src/build_profile.py --no-classify  # LLM 산업군 분류 없이 실행
-    python src/build_profile.py --make-test  # 테스트 명단(E07) 생성
+    python src/data/build_profile.py              # 변환 + 산업군 분류(키가 있을 때) + 통합 프로필 + 확인 출력
+    python src/data/build_profile.py --no-classify  # LLM 산업군 분류 없이 실행
+    python src/data/build_profile.py --make-test  # 테스트 명단(E07) 생성
 
 원본(data/raw/)은 읽기만 하고, 결과는 data/processed/ 에 저장합니다.
 """
@@ -18,8 +18,8 @@ import pandas as pd
 
 import classify_industry as ci
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MAP = json.load(open(os.path.join(ROOT, "src", "mapping.json"), encoding="utf-8"))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # 저장소 루트 (src/data/ 의 두 단계 위)
+MAP = json.load(open(os.path.join(ROOT, "src", "data", "mapping.json"), encoding="utf-8"))
 TEST_FILE_NAME = "01_참가자명단_E07_테스트행사.xlsx"
 
 # ---------------------------------------------------------------- 테스트 명단 정의
@@ -524,7 +524,7 @@ def main():
     customers = build_customers(real, events)
     ksic = ci.load_ksic()
     if not ksic:
-        print("src/ksic.json 이 없습니다. python src/make_ksic.py 를 먼저 실행해 주세요.")
+        print("src/data/ksic.json 이 없습니다. python src/data/make_ksic.py 를 먼저 실행해 주세요.")
         return 1
     companies = build_companies(real, customers, ksic, classify=not a.no_classify)
 
