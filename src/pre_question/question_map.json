@@ -1,0 +1,24 @@
+{
+ "_설명": "사전 질문 → 갈래. 질문 문장에 'match'가 들어 있으면 해당 갈래. 새 행사에 새 질문이 오면 여기에 한 줄 추가하거나, 없으면 AI(키 있을 때) 또는 담당자로 간다. 기준: 답의 재료가 상대 회사에 있으면 SALES, 우리 발행 글에 있으면 ARTICLE, 아무 데도 없으면 STAFF (11/25 팀 결정).",
+ "rules": [
+  {"match": "현업이 직접 만들 수 있는", "branch": "SALES", "why": "그 회사 직원 수준을 알아야 답함"},
+  {"match": "어느 부서부터", "branch": "SALES", "why": "그 회사 부서 구성을 알아야 답함"},
+  {"match": "1년 계획", "branch": "SALES", "why": "도입 계획 = 도입 상담"},
+  {"match": "비개발 직군", "branch": "SALES", "why": "과정 구성 문의"},
+  {"match": "경력직 평가 문항", "branch": "SALES", "why": "맞춤 과정 구성 문의"},
+  {"match": "전 직원 대상으로 진단", "branch": "SALES", "why": "그 회사 인원을 알아야 답함"},
+  {"match": "교육 시간을 업무 시간", "branch": "SALES", "why": "과정 분량 = 과정 구성 문의"},
+  {"match": "작은 회사는 무엇부터", "branch": "SALES", "why": "그 회사 규모·상황을 알아야 답함"},
+  {"match": "전담 조직", "branch": "SALES", "why": "그 회사 조직을 알아야 답함"},
+  {"match": "예산이 한정", "branch": "SALES", "why": "예산 = 비용 문의"},
+  {"match": "사내 자료를 넣어도", "branch": "SALES", "why": "그 회사 보안 규정에 달림 (11/25 팀 결정)"},
+  {"match": "인사 평가와 연결", "branch": "SALES", "why": "그 회사 인사 제도에 달림 (11/25 팀 결정, 07 사례 1)"},
+  {"match": "코딩 테스트에 AI", "branch": "STAFF", "why": "이음러닝 입장 필요, 발행 글에 답 없음"},
+  {"match": "교육 전후 차이", "branch": "ARTICLE", "why": "효과 측정 사례 글로 답"},
+  {"match": "사용 규정을 어떻게", "branch": "ARTICLE", "why": "규정 사례 글로 답"},
+  {"match": "영업 조직에 맞는 실습", "branch": "ARTICLE", "why": "직무별 사례 글로 답"},
+  {"match": "부서별 수준 차이", "branch": "ARTICLE", "why": "진단 비교 글로 답"},
+  {"match": "반복 보고서", "branch": "ARTICLE", "why": "업무 자동화 사례 글로 답"},
+  {"match": "경영진 보고용 지표", "branch": "ARTICLE", "why": "지표 글로 답"}
+ ]
+}
