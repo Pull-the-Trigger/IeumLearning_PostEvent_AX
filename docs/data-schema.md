@@ -1,7 +1,7 @@
 # 표준 데이터 스키마
 
-이음러닝 행사 후속 관리용 원본 엑셀(`data/raw/`)을 아래 6개 표로 바꿉니다.
-변환 규칙은 `src/mapping.json`에 있고, 실행은 `src/build_profile.py`로 합니다.
+이음러닝 행사 후속 관리용 원본 엑셀(`data/raw/`)을 아래 7개 표로 바꿉니다.
+변환 규칙은 `src/data/mapping.json`에 있고, 실행은 `src/data/build_profile.py`로 합니다.
 
 - 사람은 **이메일**로 구분합니다 (소문자로 바꾸고 앞뒤 공백 제거). 이름은 동명이인이 있어서 키로 쓰지 않습니다.
 - 회사명은 `(주)`, `㈜`, `주식회사`, 띄어쓰기를 지워서 통일합니다 (`(주)동명메디칼` → `동명메디칼`).
@@ -29,9 +29,50 @@
 | email | 문자 | 사람 키 | 명단의 이메일 열 |
 | name | 문자 | 이름 | 가장 최근 행사 명단의 값 |
 | company | 문자 | 회사명 (정규화) | 〃 |
+| company_key | 문자 | Company 표와 연결하는 키 (= company) | 〃 |
 | title | 문자 | 직함 | 〃 |
 | consent | Y/N | 마케팅 수신 동의 | 〃 |
 | first_event_id / last_event_id | 문자 | 처음 / 마지막 신청 행사 | 명단 파일 이름의 행사 ID |
+
+## Company — 회사 (`companies.csv`, Customer에서 생성, 1개 회사 1행)
+
+> **규칙: industry 필드는 내부용입니다** (영업 전달 카드, 성과 분석, 고객군 제안).
+> 고객에게 가는 메일 문장에는 쓰지 않습니다.
+
+| 열 | 타입 | 뜻 | 원본 |
+|---|---|---|---|
+| company_key | 문자 | 기본키. 정규화된 회사명 (Customer와 같은 규칙) | Customer의 company |
+| company_name | 문자 | 표시용 회사명 | 명단의 회사명 원본 중 가장 많이 나온 값 |
+| domain | 문자 | 이메일 도메인 | 그 회사 사람들 이메일 도메인 중 가장 많이 나온 값 |
+| industry_major | 문자 | KSIC 대분류 코드+이름 (예: `C 제조업`) | industry_mid에서 ksic.json으로 찾음 |
+| industry_mid | 문자 | KSIC 중분류 코드+이름 (예: `26 전자 부품, 컴퓨터, 영상, 음향 및 통신장비 제조업`) | 아래 분류 방식 |
+| industry_source | 문자 | `manual`(사람이 확인·수정) / `llm`(LLM 추정) / 빈칸(미분류) | |
+
+`profiles.json`·`profiles_test.json`의 각 사람에도 `industry_major`, `industry_mid` 두 필드가 `company` 바로 뒤에 들어갑니다 (회사가 Company에 없거나 미분류면 `null`).
+
+**KSIC 출처**: 한국표준산업분류 제11차 개정 (통계청 고시 제2024-2호, 2024-07-01 시행), 통계분류포털 자료실 2024-06-26 게시본
+(`data/ref/한국표준산업분류_제11차_분류체계.xlsx`의 "11차개정한국표준산업분류" 시트).
+`src/data/make_ksic.py`가 대분류 21개·중분류 77개만 뽑아 `src/data/ksic.json`으로 만듭니다 (개수가 다르면 멈춤).
+
+**분류 방식** (`src/data/classify_industry.py`)
+
+1. **확정 사전** `src/data/industry_manual.json` — `{"동명화학": "20"}`처럼 회사 키 → 중분류 코드. 여기 있으면 그 값을 쓰고 `manual`, LLM은 부르지 않습니다. `""`은 "사람이 확인했지만 미분류".
+2. **LLM** — 기본 실행에서 `.env`에 `OPENAI_API_KEY`가 있으면 자동으로 (`--no-classify`로 끌 수 있음), 1에도 지난 결과(`src/data/industry_llm.json`)에도 없는 회사의 회사명+도메인을 50개씩 묶어 OpenAI API에 보내고 중분류 코드 하나만 고르게 합니다 (주된 사업 하나, 확신 없으면 빈칸). 결과는 `src/data/industry_llm.json`에 쌓여 다음 실행부터 LLM 없이 재사용되며 `llm`으로 표시됩니다. 대분류는 LLM에 묻지 않습니다.
+3. **사람이 수정** — 틀린 값은 `src/data/industry_manual.json`에 직접 고쳐 넣으면 다음 실행부터 반영됩니다 (확인용 화면은 없음).
+
+**두 파일의 관계** (둘 다 처음엔 `{}`, 형식은 `{company_key: 중분류 코드}`로 같음, 둘 다 커밋 대상)
+
+| 순서 | 파일 | 누가 쓰나 | industry_source |
+|---|---|---|---|
+| 1 | `src/data/industry_manual.json` | 사람이 수정한 값, LLM 결과보다 우선 | `manual` |
+| 2 | `src/data/industry_llm.json` | 기본 실행의 LLM 분류 (LLM 결과를 쌓아 둠) | `llm` |
+| 3 | 둘 다 없음 | | 빈칸 (미분류) |
+
+같은 회사가 두 파일에 다 있으면 `industry_manual.json`이 이깁니다. 그래서 LLM 결과를 고칠 때 `industry_llm.json`은 건드리지 않고 `industry_manual.json`에만 추가하면 됩니다.
+
+`data/processed/companies.csv`(회사 표)는 이 두 파일과 별개로, 실행할 때마다 다시 만들어지는 결과물입니다.
+
+목록에 없는 코드(사전·LLM 모두)는 `errors.csv`에 남기고 빈칸으로 둡니다.
 
 ## Participation — 신청 1건 1행 (`01_참가자명단_E0X_*.xlsx`)
 
@@ -118,12 +159,20 @@ pandas 2.x와 3.x 둘 다 됩니다 (2.3.3, 3.1.1에서 확인했고 결과 파�
 
 ```bash
 pip install pandas openpyxl
-python src/build_profile.py              # 변환 + 통합 프로필 + 확인 출력
-python src/build_profile.py --make-test  # 테스트 명단(E07)을 다시 만들 때
+pip install openai                       # 산업군 LLM 분류를 쓸 때만 필요
+python src/data/build_profile.py              # 변환 + 산업군 분류 + 통합 프로필 + 확인 출력
+python src/data/build_profile.py --no-classify  # LLM 산업군 분류 없이 실행
+python src/data/build_profile.py --make-test  # 테스트 명단(E07)을 다시 만들 때
+python src/data/make_ksic.py                  # KSIC 엑셀이 바뀌었을 때만 (src/data/ksic.json 재생성)
 ```
 
+- 기본 실행은 `industry_manual.json`·`industry_llm.json` 어디에도 없는 회사만 LLM으로 분류해 `industry_llm.json`에 쌓습니다.
+  이미 모두 분류됐으면 LLM을 부르지 않습니다. `--no-classify`를 주면 LLM 없이 두 파일의 값만 씁니다.
+- LLM 설정: `.env`에 `OPENAI_API_KEY`, `OPENAI_MODEL`을 적는다 (`.env`는 깃헙에 올라가지 않음).
+  `OPENAI_API_KEY`는 필수, `OPENAI_MODEL`은 선택(없으면 `gpt-4.1-mini`).
+  키나 `openai` 패키지가 없으면 경고만 내고 미분류 회사는 빈칸으로 둔 채 정상 종료합니다.
 - 원본은 수정하지 않고 결과는 `data/processed/`에 저장합니다:
-  `events.csv`, `customers.csv`, `participation.csv`, `surveys.csv`, `interactions.csv`, `contents.csv`, `errors.csv`,
+  `events.csv`, `customers.csv`, `companies.csv`, `participation.csv`, `surveys.csv`, `interactions.csv`, `contents.csv`, `errors.csv`,
   `profiles.json`(원본 6개 행사), `profiles_test.json`(테스트 명단만)
 - `data/raw/01_*.xlsx`는 모두 자동으로 읽힙니다. 새 열 이름은 `mapping.json`에 추가하면 됩니다.
 - 확인 항목 중 FAIL이 있거나 실행이 멈추면 종료 코드 1을 돌려줍니다.

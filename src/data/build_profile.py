@@ -1,8 +1,9 @@
 """이음러닝 행사 후속 관리: 원본 엑셀 → 표준 스키마 → 이메일 기준 통합 프로필.
 
 실행:
-    python src/build_profile.py              # 변환 + 통합 프로필 + 확인 출력
-    python src/build_profile.py --make-test  # 테스트 명단(E07) 생성
+    python src/data/build_profile.py              # 변환 + 산업군 분류(키가 있을 때) + 통합 프로필 + 확인 출력
+    python src/data/build_profile.py --no-classify  # LLM 산업군 분류 없이 실행
+    python src/data/build_profile.py --make-test  # 테스트 명단(E07) 생성
 
 원본(data/raw/)은 읽기만 하고, 결과는 data/processed/ 에 저장합니다.
 """
@@ -15,8 +16,10 @@ import sys
 
 import pandas as pd
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MAP = json.load(open(os.path.join(ROOT, "src", "mapping.json"), encoding="utf-8"))
+import classify_industry as ci
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # 저장소 루트 (src/data/ 의 두 단계 위)
+MAP = json.load(open(os.path.join(ROOT, "src", "data", "mapping.json"), encoding="utf-8"))
 TEST_FILE_NAME = "01_참가자명단_E07_테스트행사.xlsx"
 
 # ---------------------------------------------------------------- 테스트 명단 정의
@@ -315,6 +318,7 @@ def build_customers(part, events):
         "email": last.index,
         "name": last["name"].values,
         "company": last["company"].values,
+        "company_key": last["company"].values,  # Company 표와 연결하는 키 (정규화된 회사명)
         "title": last["title"].values,
         "consent": last["consent"].values,
         "first_event_id": g["event_id"].first().values,
@@ -323,9 +327,42 @@ def build_customers(part, events):
     return cust.sort_values("email").reset_index(drop=True)
 
 
-def build_profiles(part, events, surveys, interactions):
+def build_companies(part, customers, ksic, classify=True):
+    """Customer 의 company_key 로 회사 1개 1행. 산업군은 classify_industry 의 순서대로 채움."""
+    cust = customers.dropna(subset=["company_key"])
+    rows = []
+    for key, g in cust.groupby("company_key", sort=True):
+        raw = part.loc[part["company"] == key, "company_raw"].dropna()
+        domains = g["email"].str.split("@").str[-1]
+        rows.append({
+            "company_key": key,
+            "company_name": raw.value_counts().index[0] if len(raw) else key,
+            "domain": domains.value_counts().index[0] if len(domains) else None,
+        })
+    comp = pd.DataFrame(rows, columns=["company_key", "company_name", "domain"])
+
+    manual, llm = ci.load_manual(), ci.load_llm()
+    if classify:
+        todo = [r for r in records(comp) if r["company_key"] not in manual and r["company_key"] not in llm]
+        print(f"\n■ 산업군 LLM 분류: 확정 사전 {sum(k in manual for k in comp['company_key'])}개, "
+              f"지난 LLM 결과 {sum(k in llm for k in comp['company_key'] if k not in manual)}개, 새로 분류 {len(todo)}개")
+        new = ci.classify(todo, ksic)
+        if new:
+            llm.update(new)
+            ci.save_llm(llm)
+            print(f"  → {os.path.relpath(ci.LLM_PATH, ROOT)} 에 {len(new)}개 저장")
+    res = ci.resolve(comp["company_key"].tolist(), manual, llm, ksic, err)
+    comp["industry_major"] = comp["company_key"].map(lambda k: res[k][0])
+    comp["industry_mid"] = comp["company_key"].map(lambda k: res[k][1])
+    comp["industry_source"] = comp["company_key"].map(lambda k: res[k][2])
+    return comp
+
+
+def build_profiles(part, events, surveys, interactions, companies=None):
     names = dict(zip(events["event_id"], events["event_name"]))
     dates = dict(zip(events["event_id"], events["event_date"]))
+    ind = {} if companies is None else {
+        r["company_key"]: (r["industry_major"], r["industry_mid"]) for r in records(companies)}
     cust = build_customers(part, events)
     p = event_order(part.dropna(subset=["email"]), events)
     pg = {k: v for k, v in p.groupby("email")}
@@ -338,8 +375,15 @@ def build_profiles(part, events, surveys, interactions):
     profiles = []
     for c in records(cust):
         ev = pg[c["email"]]
+        c.pop("company_key")  # profiles.json 에는 기존 필드 + 산업군 2개만
+        major, mid = ind.get(c["company"], (None, None))
+        base = {}
+        for k, v in c.items():
+            base[k] = v
+            if k == "company":  # 내부용 산업군 (고객 메일 문장에는 쓰지 않음)
+                base["industry_major"], base["industry_mid"] = major, mid
         profiles.append({
-            **c,
+            **base,
             "applied_count": int(len(ev)),
             "attended_count": int((ev["attended"] == "Y").sum()),
             "events": [{
@@ -424,6 +468,28 @@ def check_test(steps_by_file, test_part, test_profiles, profiles):
     return all(res)
 
 
+def check_companies(customers, companies, profiles, ksic):
+    print("\n■ 회사(Company) · 산업군 확인")
+    keys = set(companies["company_key"])
+    missing = sorted(set(customers["company_key"].dropna()) - keys)
+    mids = set(ksic["mid"])
+
+    def bad_mid(values):
+        return [v for v in values if not is_blank(v) and str(v).split(" ", 1)[0] not in mids]
+
+    bad_comp = bad_mid(companies["industry_mid"])
+    bad_prof = bad_mid(p["industry_mid"] for p in profiles)
+    res = [
+        check("Company 기본키 중복", 0, int(companies["company_key"].duplicated().sum())),
+        check("Company 에 없는 Customer company_key", 0, len(missing)),
+        check("companies.csv industry_mid 중 KSIC 목록 밖 (빈칸 허용)", 0, len(bad_comp)),
+        check("profiles.json industry_mid 중 KSIC 목록 밖 (빈칸 허용)", 0, len(bad_prof)),
+    ]
+    src = companies["industry_source"].fillna("(빈칸)").value_counts().to_dict()
+    print(f"  · 회사 {len(companies)}개, industry_source: {src}")
+    return all(res)
+
+
 # ---------------------------------------------------------------- 실행
 def save_csv(df, out_dir, name):
     df.to_csv(os.path.join(out_dir, name), index=False, encoding="utf-8-sig")
@@ -437,6 +503,8 @@ def save_json(obj, out_dir, name):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--make-test", action="store_true", help="테스트 명단(E07)을 data/raw/ 에 만듦")
+    ap.add_argument("--no-classify", action="store_true",
+                    help="LLM(OpenAI) 산업군 분류를 끔 (확정 사전·지난 LLM 결과만 사용)")
     ap.add_argument("--raw-dir", default=os.path.join(ROOT, "data", "raw"))
     ap.add_argument("--out-dir", default=os.path.join(ROOT, "data", "processed"))
     a = ap.parse_args()
@@ -454,9 +522,15 @@ def main():
     interactions = load_interactions(a.raw_dir, real)
     contents = load_contents(a.raw_dir)
     customers = build_customers(real, events)
+    ksic = ci.load_ksic()
+    if not ksic:
+        print("src/data/ksic.json 이 없습니다. python src/data/make_ksic.py 를 먼저 실행해 주세요.")
+        return 1
+    companies = build_companies(real, customers, ksic, classify=not a.no_classify)
 
     save_csv(events, a.out_dir, "events.csv")
     save_csv(customers, a.out_dir, "customers.csv")
+    save_csv(companies, a.out_dir, "companies.csv")
     save_csv(part, a.out_dir, "participation.csv")
     save_csv(surveys, a.out_dir, "surveys.csv")
     save_csv(interactions, a.out_dir, "interactions.csv")
@@ -483,16 +557,18 @@ def main():
         print("!" * 60)
         return 1
 
-    profiles = build_profiles(real, events, surveys, interactions)
-    test_profiles = build_profiles(test, events, surveys.iloc[0:0], interactions.iloc[0:0])
+    profiles = build_profiles(real, events, surveys, interactions, companies)
+    test_profiles = build_profiles(test, events, surveys.iloc[0:0], interactions.iloc[0:0], companies)
     save_json(profiles, a.out_dir, "profiles.json")
     save_json(test_profiles, a.out_dir, "profiles_test.json")
     print(f"통합 프로필 {len(profiles)}명 → profiles.json, 테스트 프로필 {len(test_profiles)}명 → profiles_test.json")
 
     ok1 = check_counts(real, customers, surveys, interactions, profiles)
     ok2 = check_test(steps_by_file, test, test_profiles, profiles)
-    print("\n결과: " + ("모두 OK" if ok1 and ok2 else "FAIL 이 있습니다"))
-    return 0 if ok1 and ok2 else 1
+    ok3 = check_companies(customers, companies, profiles, ksic)
+    ok = ok1 and ok2 and ok3
+    print("\n결과: " + ("모두 OK" if ok else "FAIL 이 있습니다"))
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
