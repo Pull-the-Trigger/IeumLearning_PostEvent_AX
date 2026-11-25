@@ -21,9 +21,9 @@ SYSTEM = """너는 B2B 기업교육 회사 이음러닝 마케팅본부장의 �
 - 질문에 대한 답을 지어내지 않는다.
 
 쓸 문장
-- ack: 질문을 자연스럽게 받는 한 문장.
+- ack: 질문을 자연스럽게 받는 한 문장. 행사 이름은 쓰지 않는다 (앞 문장에 이미 있음). 예: "1년 계획을 세울 때 참고할 단계를 물어보셨습니다."
 - reason:
-  · SALES: 왜 회사 상황을 여쭤야 정확히 답할 수 있는지, 무엇을 알아야 하는지 한 문장 (예: 회사가 원하는 목표, 맡은 업무, 지금의 활용 수준).
+  · SALES: 왜 회사 상황을 여쭤야 정확히 답할 수 있는지 짧은 한 문장. 이 질문에 맞는 구체적인 이유로 쓴다 ('목표와 상황에 따라 다르다' 같은 어디에나 붙는 말 금지).
   · ARTICLE: 주어진 글이 이 질문에 어떻게 도움이 되는지 한 문장. 글 제목·주제에서 알 수 있는 것만.
   · STAFF: 정확한 답을 위해 담당자가 확인한다는 한 문장.
 - ask: SALES일 때만. 담당자가 준비해서 연락할 수 있도록, 한 줄로 답할 수 있는 질문 하나를 '혹시 ~가 있으시면 회신으로 한 줄만 남겨 주십시오.' 형태로. 다른 갈래는 빈 문자열.
@@ -36,7 +36,7 @@ SCHEMA = {"type": "object", "additionalProperties": False,
           "required": ["ack", "reason", "ask", "subject_topic"],
           "properties": {k: {"type": "string"} for k in ["ack", "reason", "ask", "subject_topic"]}}
 
-BAD = re.compile(r"(\d|%|퍼센트|‘|’|\"|“|”|!|혁신|획기|압도|지금 바로|놓치지|이음 진단|이음 캠프|이음 패스|사례에서|저희 고객)")
+BAD = re.compile(r"(%|퍼센트|‘|’|\"|“|”|!|혁신|획기|압도|지금 바로|놓치지|이음 진단|이음 캠프|이음 패스|사례에서|저희 고객)")
 _cache = {}
 
 
@@ -45,8 +45,8 @@ def _strip(q):
 
 
 def fallback(branch, q, art, label):
-    ack = f"‘{_strip(q)}’라는 질문을 남겨 주셨습니다." if q else ""
-    reason = {"SALES": "이 부분은 회사가 원하는 목표와 지금의 상황에 따라 답이 달라져서, 회사 상황을 여쭙고 말씀드리는 것이 정확합니다.",
+    ack = f"신청하시며 ‘{_strip(q)}’라고 남겨 주셨습니다." if q else ""
+    reason = {"SALES": "구체적인 내용은 회사마다 출발점이 달라 상황을 여쭙고 말씀드리는 것이 정확할 것 같습니다.",
               "ARTICLE": "이 질문과 관련된 내용을 정리한 글을 전해 드립니다.",
               "STAFF": "정확한 답변을 드리기 위해 담당자가 확인한 뒤 따로 답변드리겠습니다.",
               "FACT": "", "CUSTOM_TOPIC": ""}.get(branch, "")
@@ -77,10 +77,13 @@ def lines_for(branch, title, q, art, label):
         return res
     if branch != "SALES":
         out["ask"] = ""
-    bad = [k for k in ("ack", "reason", "ask") if out[k] and BAD.search(out[k])]
+    qnums = set(re.findall(r"\d+", q))
+    def invented(t):  # 질문에 원래 있던 숫자는 허용, 새 숫자는 지어낸 것으로 본다
+        return bool(BAD.search(t)) or any(n not in qnums for n in re.findall(r"\d+", t))
+    bad = [k for k in ("ack", "reason", "ask") if out[k] and invented(out[k])]
     for k in bad:  # 검사에 걸린 문장만 틀 문장으로 바꾼다
         out[k] = fb[k]
-    if not out["subject_topic"] or BAD.search(out["subject_topic"]) or len(out["subject_topic"]) > 20:
+    if not out["subject_topic"] or invented(out["subject_topic"]) or len(out["subject_topic"]) > 20:
         out["subject_topic"] = fb["subject_topic"]
     res = {**out, "source": "ai" + (f" (틀로 교체: {', '.join(bad)})" if bad else "")}
     _cache[key] = res
@@ -99,52 +102,51 @@ def title_group(title):
     return "실무"
 
 
-def render_v2(row, art, prev_event, due, label, same_company_n, rep=None, survey_line=""):
+def render_v2(row, art, prev_event, due, label, same_company_n, rep=None, survey_line="", answer="", trigger_line=""):
+    """3덩어리: ① 인사 ② 감사·질문 받기·답변 재료·이유 ③ 약속·선택 질문·글 / 서명."""
     title = row.get("title") or ""
     name = f"{row['name']} {title}님" if title else f"{row['name']} 담당자님"
     q, ev, br = row["pre_question"], row["event_name"], row["branch"]
     L = lines_for(br, title, q, art, label)
-    parts = [f"{name}, 안녕하세요. 이음러닝 마케팅본부장 한서윤입니다."]
-    why = {"SALES": f"{ev}에 남겨 주신 질문과 관련해 연락드립니다." if q else f"{ev}에 남겨 주신 내용과 관련해 연락드립니다.",
-           "ARTICLE": f"{ev}에 남겨 주신 질문에 답변드리고자 연락드립니다.",
-           "STAFF": f"{ev}에 남겨 주신 질문과 관련해 연락드립니다.",
-           "FACT": f"{ev}에 남겨 주신 질문에 답변드리고자 연락드립니다.",
-           "CUSTOM_TOPIC": f"{ev} 설문에 남겨 주신 관심 주제와 관련해 연락드립니다."}[br]
-    parts.append(" ".join(x for x in [why, f"지난 {prev_event}에 이어 다시 참석해 주셔서 감사합니다." if prev_event else "",
-                                      survey_line] if x))
+    who = f"{rep['team']} {rep['name']} {rep['position']}{_iga(rep['position'])}" if rep else "담당자가"
+    hello = f"{name}, 안녕하세요. 이음러닝 마케팅본부장 한서윤입니다."
+    thanks = (f"지난 {prev_event}에 이어 {ev}에도 와 주셔서 감사합니다." if prev_event
+              else f"{ev}에 참석해 주셔서 감사합니다.")
+    mid = [thanks, survey_line]
+    end = []
+    link = f"\n「{art['title']}」\n{art['url']}" if art else ""
     if br == "SALES":
         if q:
-            parts.append(" ".join(x for x in [L["ack"], L["reason"]] if x))
-        elif "설문 연락 희망" in row["sales_triggers"]:
-            parts.append("설문에서 담당자 연락을 요청해 주셨습니다.")
+            mid += [L["ack"], answer]
+            mid.append("다만 구체적인 내용은 회사마다 출발점이 달라 상황을 여쭙고 말씀드리겠습니다." if answer else L["reason"])
+            ask = L["ask"]
         else:
-            parts.append("남겨 주신 내용을 바탕으로 필요하신 부분을 여쭙고자 합니다.")
-        who = f"{rep['team']} {rep['name']} {rep['position']}{_iga(rep['position'])}" if rep else "담당자가"
-        promise = f"{who} {due.month}월 {due.day}일까지 연락드리겠습니다."
-        if not q:
-            promise += " 혹시 먼저 이야기 나누고 싶은 부분이 있으시면 회신으로 한 줄만 남겨 주십시오. 그 내용을 기준으로 준비해서 연락드리겠습니다."
-        if q:
-            promise += " " + L["ask"].replace("회신으로 한 줄만 남겨 주십시오.", "회신으로 한 줄만 남겨 주십시오. 그 내용을 기준으로 준비해서 연락드리겠습니다.")
-        parts.append(promise)
+            mid.append(trigger_line or "남겨 주신 내용을 바탕으로 필요하신 부분을 여쭙고자 연락드립니다.")
+            ask = "혹시 먼저 이야기 나누고 싶은 부분이 있으시면 회신으로 한 줄만 남겨 주십시오."
+        end.append(f"{who} {due.month}월 {due.day}일까지 연락드리겠습니다.")
+        if ask:
+            end.append(ask.replace("회신으로 한 줄만 남겨 주십시오.", "회신으로 한 줄만 남겨 주십시오. 그 내용을 기준으로 준비해서 연락드리겠습니다."))
         if art:
-            parts.append(f"그 전에 참고하실 수 있도록 관련 글을 한 편 전해 드립니다.\n「{art['title']}」\n{art['url']}")
+            end.append("관련 글도 함께 보내 드립니다." + link)
     elif br == "ARTICLE":
-        parts.append(" ".join(x for x in [L["ack"], L["reason"]] if x) + f"\n「{art['title']}」\n{art['url']}")
+        mid += [L["ack"], answer]
+        end.append(("더 자세한 내용은 이 글에 정리되어 있습니다." if answer else (L["reason"] or "이 질문을 다룬 글을 전해 드립니다.")) + link)
+        end.append("궁금하신 점은 이 메일로 회신해 주십시오.")
     elif br == "STAFF":
-        # 약속 문장은 틀로 고정 ("따로 답변드리겠습니다"가 빠지지 않게)
-        who = f"{rep['team']} {rep['name']} {rep['position']}{_iga(rep['position'])}" if rep else "담당자가"
-        parts.append(" ".join(x for x in [L["ack"], f"정확한 답변을 드리기 위해 {who} 확인한 뒤 따로 답변드리겠습니다."] if x))
+        mid += [L["ack"], f"정확한 답변을 드리기 위해 {who} 확인한 뒤 따로 답변드리겠습니다."]
         if art:
-            parts.append(f"직접적인 답은 아니지만 참고가 될 만한 글을 먼저 전해 드립니다.\n「{art['title']}」\n{art['url']}")
+            end.append("직접적인 답은 아니지만 참고가 될 만한 글을 먼저 전해 드립니다." + link)
+        end.append("궁금하신 점은 이 메일로 회신해 주십시오.")
     elif br == "FACT":
-        parts.append(f"{L['ack']} [행사 기록으로 답변 작성 — 기록에 없으면 담당자 확인]")
+        mid += [L["ack"], "[행사 기록으로 답변 작성 — 기록에 없으면 담당자 확인]"]
     elif br == "CUSTOM_TOPIC":
-        parts.append(f"설문에서 ‘{row['survey_topic']}’에 관한 이야기를 듣고 싶다고 남겨 주셔서, 이 주제를 다룬 글을 전해 드립니다.\n"
-                     f"「{art['title']}」\n{art['url']}")
-    if br != "SALES":
-        parts.append("궁금하신 점은 이 메일로 회신해 주십시오.")
-    parts.append("이음러닝 마케팅본부장 한서윤 드림")
+        mid.append(f"설문에서 ‘{row['survey_topic']}’에 관한 이야기를 듣고 싶다고 남겨 주셔서, 이 주제를 다룬 글을 전해 드립니다." + link)
+    # 약속과 선택 질문은 한 문단으로, 글(제목+링크)과 맺음말은 각각 따로
+    prose = [e for e in end if "「" not in e and not e.startswith("궁금하신")]
+    rest = [e for e in end if e not in prose]
+    blocks = [hello, " ".join(x for x in mid if x), " ".join(prose)] + rest + ["이음러닝 마케팅본부장 한서윤 드림"]
+    body = "\n\n".join(b for b in blocks if b)
     topic = (label or L["subject_topic"]) if q else ("담당자 연락 요청" if br == "SALES" else row.get("survey_topic") or "관심 주제")
     subject = f"[이음러닝] {ev}에 남겨 주신 ‘{topic}’ 관련" + (" 글" if br in ("ARTICLE", "CUSTOM_TOPIC") else "")
     note = f"같은 회사 수신자 {same_company_n}명 — 문장이 겹치지 않는지 확인" if same_company_n > 1 else ""
-    return subject, "\n\n".join(parts), L["source"], note
+    return subject, body, L["source"], note

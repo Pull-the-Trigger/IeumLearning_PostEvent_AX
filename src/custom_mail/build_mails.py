@@ -10,8 +10,8 @@
 3. 갈래별 문안 틀에 넣는다 — 문장은 사람이 정한 틀만 쓰고 AI는 문장을 쓰지 않는다 (지어내기 방지)
 4. 06 글쓰기 기준 검사 (합니다체, 금지 표현, 느낌표·이모지, 제품명 표기)
 
-출력: out/custom_mails.csv (본부장 검토용 초안, v2 + 비교용 v1), out/sales_handoff.csv (영업 담당자용 근거),
-      out/mail_compare.csv (기존 v1 vs 새 v2 12통 나란히), out/content_gaps.csv (다음에 쓸 글 목록)
+출력: out/custom_mails.csv (본부장 검토용 메일 초안), out/sales_handoff.csv (영업 담당자용 근거),
+      out/content_gaps.csv (다음에 쓸 글 목록), out/answer_bank_review.csv (답변 재료집 검수표)
 모든 메일은 초안이다. 본부장 승인 전에는 발송하지 않는다.
 """
 import csv
@@ -26,7 +26,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(ROOT / "src" / "pre_question"))
 sys.path.insert(0, str(HERE))
-from mail_v2 import render_v2  # noqa: E402
+from mail_writer import render_mail  # noqa: E402
 PROCESSED = ROOT / "data" / "processed"
 OUT = ROOT / "out"
 
@@ -139,58 +139,6 @@ class ArticlePicker:
         return (a, "AI: " + out["reason"]) if a else (None, "맞는 글 없음 (AI 판단) → 관심 분야로 기록")
 
 
-def article_block(a, lead):
-    return f"{lead}\n「{a['title']}」\n{a['url']}"
-
-
-def render(row, art, prev_event, send_by):
-    name = f"{row['name']} {row['title']}님" if row.get("title") else f"{row['name']} 담당자님"
-    q, ev = row["pre_question"], row["event_name"]
-    br = row["branch"]
-    lines = [f"{name}, 안녕하세요. {SENDER}입니다."]
-    # 첫 문단: 왜 연락하는지 한 문장 (06-1)
-    why = {"SALES": f"{ev}에서 남겨 주신 내용과 관련해 연락드립니다.",
-           "ARTICLE": f"{ev}에 신청하시며 남겨 주신 질문에 답변드리고자 연락드립니다.",
-           "STAFF": f"{ev}에 신청하시며 남겨 주신 질문과 관련해 연락드립니다.",
-           "FACT": f"{ev}에 신청하시며 남겨 주신 질문에 답변드리고자 연락드립니다.",
-           "CUSTOM_TOPIC": f"{ev} 설문에 남겨 주신 관심 주제와 관련해 연락드립니다."}[br]
-    lines.append(why)
-    if prev_event:
-        lines.append(f"지난 {prev_event}에 이어 다시 참석해 주셔서 감사합니다.")
-    body = []
-    if br == "SALES":
-        due = add_business_days(send_by, CONTACT_BUSINESS_DAYS)
-        if q:
-            body.append(f"신청서에 ‘{q}’라고 물어보셨습니다. 더 정확히 안내드리기 위해 "
-                        f"담당자가 {due.month}월 {due.day}일까지 직접 연락드려 회사 상황을 여쭙고 자세히 안내드리겠습니다.")
-        elif "설문 연락 희망" in row["sales_triggers"]:
-            body.append(f"설문에서 담당자 연락을 요청해 주셨습니다. 담당자가 {due.month}월 {due.day}일까지 직접 연락드리겠습니다.")
-        else:
-            body.append(f"남겨 주신 내용을 바탕으로 담당자가 {due.month}월 {due.day}일까지 직접 연락드려 필요하신 부분을 여쭙겠습니다.")
-        if art:
-            body.append(article_block(art, "연락드리기 전에 참고하실 수 있도록 관련 글을 한 편 전해 드립니다."))
-    elif br == "ARTICLE":
-        body.append(f"신청서에 ‘{q}’라고 물어보셨습니다. 이 질문을 다룬 글을 전해 드립니다.")
-        body.append(article_block(art, "").lstrip("\n"))
-    elif br == "STAFF":
-        body.append(f"신청서에 ‘{q}’라고 물어보셨습니다. 정확한 답변을 드리기 위해 담당자가 확인한 뒤 따로 답변드리겠습니다.")
-        if art:
-            body.append(article_block(art, "직접적인 답은 아니지만 참고가 될 만한 글을 먼저 전해 드립니다."))
-    elif br == "FACT":
-        body.append(f"신청서에 ‘{q}’라고 물어보셨습니다. [행사 기록으로 답변 작성 — 기록에 없으면 담당자 확인]")
-    elif br == "CUSTOM_TOPIC":
-        body.append(article_block(art, f"설문에서 ‘{row['survey_topic']}’에 관한 이야기를 듣고 싶다고 남겨 주셔서, 이 주제를 다룬 글을 전해 드립니다."))
-    lines += body
-    lines.append("궁금하신 점은 이 메일에 회신해 주십시오.")
-    lines.append(f"{SENDER} 드림")
-    subject = {"SALES": f"[이음러닝] {ev}에서 남겨 주신 내용 관련 안내",
-               "ARTICLE": f"[이음러닝] {ev}에서 남겨 주신 질문에 대한 답변",
-               "STAFF": f"[이음러닝] {ev}에서 남겨 주신 질문 관련 안내",
-               "FACT": f"[이음러닝] {ev}에서 남겨 주신 질문에 대한 답변",
-               "CUSTOM_TOPIC": f"[이음러닝] {ev} 설문에 남겨 주신 관심 주제 관련 글"}[br]
-    return subject, "\n\n".join(lines)
-
-
 def load_staff():
     """담당자 목록(가상, src/custom_mail/staff_directory.csv). 실제 운영 땐 이 표만 바꾸면 된다."""
     with open(HERE / "staff_directory.csv", encoding="utf-8-sig", newline="") as f:
@@ -211,7 +159,39 @@ def josa_iga(word):
     return "이" if "가" <= ch <= "힣" and (ord(ch) - 0xAC00) % 28 else "가"
 
 
-def main(as_of_mode="send"):
+def load_answers(include_drafts):
+    """답변 재료집: 근거(basis)가 있는 것만. 그중 approved만 (include_drafts면 draft도 미리 보기).
+    근거가 없는 답변은 승인 여부와 상관없이 절대 메일에 넣지 않는다."""
+    data = json.loads((HERE / "answer_bank.json").read_text(encoding="utf-8"))["answers"]
+    ok = ("approved", "draft") if include_drafts else ("approved",)
+    usable, blocked = {}, []
+    for k, v in data.items():
+        if not v.get("text"):
+            continue
+        if not v.get("basis"):
+            blocked.append(k)
+            continue
+        if v.get("status") in ok:
+            usable[k] = v
+    if blocked:
+        print(f"근거가 없어 메일에 넣지 않는 답변 {len(blocked)}개: {', '.join(blocked)}")
+    return usable
+
+
+def trigger_sentence(triggers):
+    """질문 없는 영업 메일: 왜 연락하는지 그 사람이 남긴 사실로 한 문장."""
+    if "설문 연락 희망" in triggers:
+        return "설문에서 담당자 연락을 요청해 주셔서 연락드립니다."
+    if "설문 도입 검토(검토 중)" in triggers:
+        return "설문에서 AI 교육 도입을 검토 중이라고 답해 주셔서 연락드립니다."
+    if "설문 도입 검토" in triggers:
+        return "설문에서 AI 교육 도입을 검토하고 계시다고 답해 주셔서 연락드립니다."
+    if "현장·후속 기록" in triggers:
+        return "행사장에서 나눈 이야기와 관련해 이어서 연락드립니다."
+    return ""
+
+
+def main(as_of_mode="send", include_drafts=False):
     env = ROOT / ".env"
     if env.exists():
         for line in env.read_text(encoding="utf-8-sig").splitlines():
@@ -226,6 +206,7 @@ def main(as_of_mode="send"):
     surveys = {(s["event_id"], s["email"].strip().lower()): s for s in read("surveys.csv") if s.get("email")}
     picker = ArticlePicker()
     staff = load_staff()
+    answers = load_answers(include_drafts)
     # 산업군(내부용, 팀원 data 브랜치 11/25): 영업 전달 패키지에만 쓰고 메일 본문에는 쓰지 않는다
     industry = {}
     pj = PROCESSED / "profiles.json"
@@ -256,10 +237,9 @@ def main(as_of_mode="send"):
             note = "맞는 글이 없어 담당자로 전환"
         if r["branch"] == "CUSTOM_TOPIC" and not art:
             note = "주제에 맞는 글 없음 → 맞춤 메일 생략, 관심 분야 기록"
-            mails.append({**_base(r), "subject": "", "body": "", "sentence_source": "", "assigned_staff": "", "article": "",
-                          "article_reason": art_why, "note": note, "lint": "", "subject_v1": "", "body_v1": ""})
+            mails.append({**_base(r), "subject": "", "body": "", "sentence_source": "", "answer": "", "assigned_staff": "", "article": "",
+                          "article_reason": art_why, "note": note, "lint": ""})
             continue
-        subject_v1, body_v1 = render(r, art, prev_event, send_by)
         due = add_business_days(send_by, CONTACT_BUSINESS_DAYS)
         ind_major = industry.get(r["email"], ("", ""))[0]
         rep = None
@@ -268,14 +248,21 @@ def main(as_of_mode="send"):
         sv = surveys.get((r["event_id"], r["email"]), {})
         helpful = (sv.get("q4_helpful_content") or "").strip()
         survey_line = f"설문에서 ‘{helpful}’{josa_iga(helpful)} 도움이 되었다고 남겨 주셔서 감사합니다." if helpful else ""
-        subject, body, src, co_note = render_v2(r, art, prev_event, due, picker.label(r["pre_question"]),
-                                                same_co[(r["event_id"], r["company"])], rep, survey_line)
+        label = picker.label(r["pre_question"])
+        ans = answers.get(label, {}) if r["pre_question"] and r["branch"] in ("SALES", "ARTICLE") else {}
+        subject, body, src, co_note = render_mail(r, art, prev_event, due, label,
+                                                same_co[(r["event_id"], r["company"])], rep, survey_line,
+                                                ans.get("text", ""), trigger_sentence(r["sales_triggers"]))
+        if ans.get("status") == "draft":
+            lvl = {"strong": "근거 충분", "partial": "근거 일부 — 보강 필요"}.get(ans.get("basis_level"), "")
+            co_note = "; ".join(x for x in [co_note, f"검수 전 답변 포함({lvl}) — 승인 필요"] if x)
         warns = lint(subject + "\n" + body)
         mails.append({**_base(r), "subject": subject, "body": body, "sentence_source": src,
+                      "answer": ans.get("status", ""),
                       "assigned_staff": f"{rep['name']} {rep['position']} ({rep['team']})" if rep else "",
                       "article": f"{art['content_id']} {art['title']}" if art else "",
                       "article_reason": art_why, "note": "; ".join(x for x in [note, co_note] if x),
-                      "lint": "; ".join(warns), "subject_v1": subject_v1, "body_v1": body_v1})
+                      "lint": "; ".join(warns)})
         if r["branch"] == "SALES":
             k = (r["event_id"], r["email"])
             s = surveys.get(k, {})
@@ -334,19 +321,16 @@ def main(as_of_mode="send"):
             w.writeheader()
             w.writerows(gap_rows)
 
-    # 기존(v1) vs 새 버전(v2) 비교: 갈래·글 유무·직함군별로 골고루 12통
-    seen, cmp_rows = set(), []
-    for m in mails:
-        k = (m["branch"], bool(m["article"]), any(t in m["title"] for t in ("대표", "전무", "상무", "부사장")), bool(m["pre_question"]))
-        if m["body"] and k not in seen and len(cmp_rows) < 12:
-            seen.add(k)
-            cmp_rows.append({"branch": m["branch"], "name": m["name"], "title": m["title"], "pre_question": m["pre_question"],
-                             "v1_subject": m["subject_v1"], "v1_body": m["body_v1"],
-                             "v2_subject": m["subject"], "v2_body": m["body"], "v2_sentence_source": m["sentence_source"]})
-    with open(OUT / "mail_compare.csv", "w", encoding="utf-8-sig", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=list(cmp_rows[0].keys()))
-        w.writeheader()
-        w.writerows(cmp_rows)
+    # 답변 재료집 검수표: 승인하는 사람이 답변과 근거를 한 줄씩 확인
+    bank = json.loads((HERE / "answer_bank.json").read_text(encoding="utf-8"))["answers"]
+    with open(OUT / "answer_bank_review.csv", "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["topic", "status", "basis_level", "answer", "basis_title", "basis_url", "basis_supports", "note"])
+        for k, v in bank.items():
+            for b in (v.get("basis") or [{}]):
+                w.writerow([k, v.get("status"), v.get("basis_level"), v.get("text"), b.get("title", ""),
+                            b.get("url", ""), b.get("supports", ""), v.get("note", "")])
+
     from collections import Counter
     print("문장 출처:", dict(Counter(m["sentence_source"].split(" (")[0] for m in mails if m["body"])))
     print(f"\n맞춤 메일 초안 {sum(1 for m in mails if m['body'])}통 →", dict(Counter(m["branch"] for m in mails if m["body"])))
@@ -355,7 +339,10 @@ def main(as_of_mode="send"):
     print("글쓰기 기준 경고:", sum(1 for m in mails if m["lint"]), "통")
     print(f"영업 전달 패키지 {len(handoff)}건 → out/sales_handoff.csv")
     print(f"다음에 쓸 글 목록 {len(gap_rows)}개 주제 → out/content_gaps.csv")
+    print("답변 재료집 검수표 → out/answer_bank_review.csv")
     print("설문 '도움된 내용' 문장 들어간 메일:", sum(1 for m in mails if "도움이 되었다고" in m["body"]), "통")
+    print("답변 재료가 들어간 메일:", sum(1 for m in mails if m.get("answer")),
+          "통" + ("" if include_drafts else " (승인된 답변만. 검수 전 답변까지 보려면 --include-drafts)"))
 
 
 def as_of(send_by, mode):
@@ -373,4 +360,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--as-of", choices=["send", "today"], default="send",
                     help="send: 메일 시점에 있던 글만 (기본) / today: 지금 있는 글 전부")
-    main(ap.parse_args().as_of)
+    ap.add_argument("--include-drafts", action="store_true",
+                    help="답변 재료집의 검수 전(draft) 답변도 넣어서 미리 보기")
+    a = ap.parse_args()
+    main(a.as_of, a.include_drafts)
