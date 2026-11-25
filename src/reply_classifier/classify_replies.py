@@ -32,10 +32,10 @@ SALES_REPLY_BUSINESS_DAYS = 3  # 인터뷰 7번: 영업일 3일 목표
 def load_env():
     env = ROOT / ".env"
     if env.exists():
-        for line in env.read_text(encoding="utf-8").splitlines():
+        for line in env.read_text(encoding="utf-8-sig").splitlines():
             if "=" in line and not line.strip().startswith("#"):
                 k, v = line.split("=", 1)
-                os.environ.setdefault(k.strip(), v.strip().strip('"'))
+                os.environ[k.strip()] = v.strip().strip('"').strip("'")  # .env가 컴퓨터 환경변수보다 우선
 
 
 def load_replies(path):

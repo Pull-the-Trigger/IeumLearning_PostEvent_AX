@@ -12,7 +12,8 @@
      - 설문 연락 희망 Y / 설문 도입 검토 Y 또는 검토 중
      - 행사장 견적·소개서·미팅 요청 (후속연락기록)
      - 사전 질문이 영업 갈래 (도입·과정·비용, 또는 상대 회사 정보 필요)
-  2. 사전 질문이 있으면 그 갈래 (ARTICLE / STAFF). 모르는 질문은 AI, 키 없으면 STAFF
+  2. 사전 질문이 있으면 그 갈래 (ARTICLE / STAFF / FACT) — classify.py
+     사전 문장과 다르게 써도 AI가 뜻으로 판단, 키 없으면 STAFF. "없습니다" 같은 글은 질문 없음
   3. 질문 없음 + 설문 '듣고 싶은 주제' 있음 + 수신 동의 → CUSTOM_TOPIC (주제로 글 1편)
   4. 아무것도 안 남김, 또는 미동의자인데 질문 없음 → THANKS_ONLY (감사 메일만)
 출력: <out>.csv (1인 1행사 1행), <out>_contact_needed.csv (연락 희망했지만 이메일 없는 설문)
@@ -26,9 +27,9 @@ from collections import Counter
 from datetime import date, timedelta
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 ROOT = Path(__file__).resolve().parents[2]
 PROCESSED = ROOT / "data" / "processed"
-MAP = Path(__file__).resolve().parent / "question_map.json"
 EXEC_TITLES = ("대표", "전무", "부사장", "상무", "CTO", "CEO", "본부장", "실장", "임원", "이사", "공장장")
 SALES_WORDS_IN_RECORD = ("견적", "미팅", "소개서", "제안")
 
@@ -41,10 +42,10 @@ def read(name):
 def load_env():
     env = ROOT / ".env"
     if env.exists():
-        for line in env.read_text(encoding="utf-8").splitlines():
+        for line in env.read_text(encoding="utf-8-sig").splitlines():
             if "=" in line and not line.strip().startswith("#"):
                 k, v = line.split("=", 1)
-                os.environ.setdefault(k.strip(), v.strip().strip('"'))
+                os.environ[k.strip()] = v.strip().strip('"').strip("'")  # .env가 컴퓨터 환경변수보다 우선
 
 
 def add_business_days(d, n):
@@ -55,39 +56,9 @@ def add_business_days(d, n):
     return d
 
 
-def classify_question(q, rules, cache):
-    for r in rules:
-        if r["match"] in q:
-            return r["branch"], r["why"], "map"
-    if q in cache:
-        return cache[q]
-    res = ("STAFF", "질문 사전에 없음 → 담당자 확인 (AI 키 없음)", "default")
-    if os.getenv("OPENAI_API_KEY"):
-        res = _llm(q)
-    cache[q] = res
-    return res
-
-
-def _llm(q):
-    from openai import OpenAI
-    schema = {"type": "object", "additionalProperties": False, "required": ["branch", "why"],
-              "properties": {"branch": {"type": "string", "enum": ["SALES", "ARTICLE", "STAFF"]},
-                             "why": {"type": "string"}}}
-    sys_prompt = ("B2B 기업교육 회사 행사 참가자의 사전 질문을 분류한다. 기준은 답의 재료가 어디 있는가.\n"
-                  "SALES: 도입 방법·과정 구성·비용을 묻거나, 답하려면 상대 회사 정보(규모·부서·업종·수준·예산·내부 규정·인사 제도)를 되물어야 함\n"
-                  "ARTICLE: 다른 회사 사례나 일반 정보라 발행된 글로 답할 수 있음\n"
-                  "STAFF: 이음러닝의 입장이나 새로 알아봐야 하는 정보가 필요함, 또는 애매함. 애매하면 STAFF.")
-    resp = OpenAI().chat.completions.create(
-        model=os.getenv("OPENAI_MODEL", "gpt-5.4-mini"),
-        messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": q}],
-        response_format={"type": "json_schema", "json_schema": {"name": "pq", "strict": True, "schema": schema}})
-    out = json.loads(resp.choices[0].message.content)
-    return out["branch"], "AI: " + out["why"], "llm"
-
-
 def main(out_stem):
     load_env()
-    rules = json.loads(MAP.read_text(encoding="utf-8"))["rules"]
+    from classify import classify  # .env를 읽은 뒤에 불러온다
     events = {e["event_id"]: e for e in read("events.csv")}
     parts = [p for p in read("participation.csv") if p["attended"] == "Y" and p.get("is_test") != "True"]
     surveys = read("surveys.csv")
@@ -101,7 +72,7 @@ def main(out_stem):
         if i.get("email"):
             rec.setdefault((i["event_id"], i["email"].strip().lower()), []).append(i)
 
-    cache, rows = {}, []
+    rows = []
     for p in parts:
         k = (p["event_id"], p["email"].strip().lower())
         s, recs = sv.get(k), rec.get(k, [])
@@ -118,7 +89,10 @@ def main(out_stem):
             txt = f"{i.get('memo', '')} {i.get('result', '')}"
             if any(w in txt for w in SALES_WORDS_IN_RECORD):
                 triggers.append(f"현장·후속 기록: {i.get('memo', '')}")
-        q_branch, q_why, q_src = classify_question(q, rules, cache) if q else ("", "", "")
+        c = classify(q) if q else {"branch": "NONE", "reason": "", "source": ""}
+        q_branch, q_why, q_src = c["branch"], c["reason"], c["source"]
+        if q_branch == "NONE":
+            q = ""  # "없습니다" 같은 글은 질문 없는 사람과 똑같이 처리
         if q_branch == "SALES":
             triggers.append(f"사전 질문: {q_why}")
 
@@ -127,7 +101,8 @@ def main(out_stem):
         elif q:
             branch = q_branch
             mail = {"ARTICLE": "맞춤 메일(되짚기+글 1편, 맞는 글 없으면 담당자)",
-                    "STAFF": "맞춤 메일(되짚기+참고 글+'담당자가 따로 답변') + 할 일 등록"}[q_branch]
+                    "STAFF": "맞춤 메일(되짚기+참고 글+'담당자가 따로 답변') + 할 일 등록",
+                    "FACT": "맞춤 메일(되짚기+행사 기록으로 사실 답변) — 기록에 없으면 담당자"}[q_branch]
         elif topic and consent:
             branch, mail = "CUSTOM_TOPIC", "맞춤 메일(설문 주제로 글 1편)"
         else:
@@ -170,7 +145,7 @@ def main(out_stem):
     print(f"연락처 확인 필요(연락 희망·이메일 없음) {len(missing)}건")
     by_ev = Counter((r["event_id"], r["branch"]) for r in rows)
     for e in sorted(events):
-        print(e, {b: by_ev[(e, b)] for b in ["SALES", "ARTICLE", "STAFF", "CUSTOM_TOPIC", "THANKS_ONLY"]})
+        print(e, {b: by_ev[(e, b)] for b in ["SALES", "ARTICLE", "STAFF", "FACT", "CUSTOM_TOPIC", "THANKS_ONLY"]})
     unknown = [r for r in rows if r["question_source"] in ("default", "llm")]
     if unknown:
         print(f"질문 사전에 없는 질문 {len(unknown)}건 — question_map.json에 추가 검토")
