@@ -6,133 +6,152 @@
    "branch": "SALES",
    "why": "그 회사 직원 수준을 알아야 답함",
    "example": "현업이 직접 만들 수 있는 수준인지 궁금합니다.",
-   "article": "C008"
+   "article": "C008",
+   "label": "현업 자동화 수준"
   },
   {
    "match": "어느 부서부터",
    "branch": "SALES",
    "why": "그 회사 부서 구성을 알아야 답함",
    "example": "어느 부서부터 시작하는 것이 좋을까요?",
-   "article": "C021"
+   "article": "C021",
+   "label": "시작 부서 선정"
   },
   {
    "match": "1년 계획",
    "branch": "SALES",
    "why": "도입 계획 = 도입 상담",
    "example": "1년 계획을 세울 때 참고할 단계가 있나요?",
-   "article": "C012"
+   "article": "C012",
+   "label": "1년 도입 계획"
   },
   {
    "match": "비개발 직군",
    "branch": "SALES",
    "why": "과정 구성 문의",
    "example": "비개발 직군도 따라갈 수 있는 과정이 있나요?",
-   "article": "C001"
+   "article": "C001",
+   "label": "비개발 직군 과정"
   },
   {
    "match": "경력직 평가 문항",
    "branch": "SALES",
    "why": "맞춤 과정 구성 문의",
    "example": "경력직 평가 문항을 따로 만들 수 있나요?",
-   "article": "C016"
+   "article": "C016",
+   "label": "경력직 평가 문항"
   },
   {
    "match": "전 직원 대상으로 진단",
    "branch": "SALES",
    "why": "그 회사 인원을 알아야 답함",
    "example": "전 직원 대상으로 진단하면 기간이 얼마나 걸리나요?",
-   "article": "C024"
+   "article": "C024",
+   "label": "전 직원 진단 기간"
   },
   {
    "match": "교육 시간을 업무 시간",
    "branch": "SALES",
    "why": "과정 분량 = 과정 구성 문의",
    "example": "교육 시간을 업무 시간 안에 넣을 수 있는 분량인가요?",
-   "article": "C028"
+   "article": "C028",
+   "label": "교육 시간 편성"
   },
   {
    "match": "작은 회사는 무엇부터",
    "branch": "SALES",
    "why": "그 회사 규모·상황을 알아야 답함",
    "example": "작은 회사는 무엇부터 해야 하나요?",
-   "article": "C005"
+   "article": "C005",
+   "label": "작은 회사의 시작"
   },
   {
    "match": "전담 조직",
    "branch": "SALES",
    "why": "그 회사 조직을 알아야 답함",
    "example": "전담 조직이 꼭 필요한가요?",
-   "article": "C019"
+   "article": "C019",
+   "label": "전담 조직 필요 여부"
   },
   {
    "match": "예산이 한정",
    "branch": "SALES",
    "why": "예산 = 비용 문의",
    "example": "예산이 한정적일 때의 순서가 궁금합니다.",
-   "article": "C010"
+   "article": "C010",
+   "label": "예산 우선순위"
   },
   {
    "match": "사내 자료를 넣어도",
    "branch": "SALES",
    "why": "그 회사 보안 규정에 달림 (11/25 팀 결정)",
    "example": "사내 자료를 넣어도 되는지 기준이 있나요?",
-   "article": "C032"
+   "article": "C032",
+   "label": "사내 자료 사용 기준"
   },
   {
    "match": "인사 평가와 연결",
    "branch": "SALES",
    "why": "그 회사 인사 제도에 달림 (11/25 팀 결정, 07 사례 1)",
    "example": "진단 결과를 인사 평가와 연결해도 되는지 궁금합니다.",
-   "article": "C031"
+   "article": "C031",
+   "label": "진단 결과와 인사 평가"
   },
   {
    "match": "코딩 테스트에 AI",
    "branch": "STAFF",
    "why": "이음러닝 입장 필요, 발행 글에 답 없음",
    "example": "코딩 테스트에 AI 사용을 허용해야 하나요?",
-   "article": "C013"
+   "article": "C013",
+   "label": "코딩 테스트 AI 허용"
   },
   {
    "match": "교육 전후 차이",
    "branch": "ARTICLE",
    "why": "효과 측정 사례 글로 답",
    "example": "교육 전후 차이를 숫자로 보여 줄 수 있나요?",
-   "article": "C014"
+   "article": "C014",
+   "label": "교육 효과 측정"
   },
   {
    "match": "사용 규정을 어떻게",
    "branch": "ARTICLE",
    "why": "규정 사례 글로 답",
    "example": "사용 규정을 어떻게 만들었는지 사례가 궁금합니다.",
-   "article": "C030"
+   "article": "C030",
+   "label": "사용 규정 사례"
   },
   {
    "match": "영업 조직에 맞는 실습",
    "branch": "ARTICLE",
    "why": "직무별 사례 글로 답",
    "example": "영업 조직에 맞는 실습 사례가 궁금합니다.",
-   "article": "C034"
+   "article": "C034",
+   "label": "영업 조직 실습 사례"
   },
   {
    "match": "부서별 수준 차이",
    "branch": "ARTICLE",
    "why": "진단 비교 글로 답",
    "example": "부서별 수준 차이를 어떻게 비교하나요?",
-   "article": "C015"
+   "article": "C015",
+   "label": "부서별 수준 비교"
   },
   {
    "match": "반복 보고서",
    "branch": "ARTICLE",
    "why": "업무 자동화 사례 글로 답",
    "example": "반복 보고서 작성을 줄인 사례가 있나요?",
-   "article": "C009"
+   "article": "C009",
+   "label": "반복 보고서 자동화"
   },
   {
    "match": "경영진 보고용 지표",
    "branch": "ARTICLE",
    "why": "지표 글로 답",
    "example": "경영진 보고용 지표가 있나요?",
-   "article": "C026"
+   "article": "C026",
+   "label": "경영진 보고 지표"
   }
  ]
 }

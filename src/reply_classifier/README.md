@@ -45,7 +45,7 @@ python src/reply_classifier/classify_replies.py data/test/test_replies.json
 python src/reply_classifier/evaluate.py data/test/test_replies.json
 ```
 입력 파일에는 `sender_email`, `subject`, `body` 세 열만 있으면 됩니다.
-명단이 바뀌면 `src/build_profile.py`로 `profiles.json`만 다시 만들면 돼요.
+명단이 바뀌면 `src/data/build_profile.py`로 `profiles.json`만 다시 만들면 돼요.
 
 ## API 키
 레포 루트 `.env`에 `OPENAI_API_KEY=...` 형태로 넣습니다. `.env`는 `.gitignore`에 들어 있어요. **절대 커밋하지 마세요.**

@@ -10,7 +10,8 @@
 3. 갈래별 문안 틀에 넣는다 — 문장은 사람이 정한 틀만 쓰고 AI는 문장을 쓰지 않는다 (지어내기 방지)
 4. 06 글쓰기 기준 검사 (합니다체, 금지 표현, 느낌표·이모지, 제품명 표기)
 
-출력: out/custom_mails.csv (본부장 검토용 초안), out/sales_handoff.csv (영업 담당자용 근거)
+출력: out/custom_mails.csv (본부장 검토용 초안, v2 + 비교용 v1), out/sales_handoff.csv (영업 담당자용 근거),
+      out/mail_compare.csv (기존 v1 vs 새 v2 12통 나란히), out/content_gaps.csv (다음에 쓸 글 목록)
 모든 메일은 초안이다. 본부장 승인 전에는 발송하지 않는다.
 """
 import csv
@@ -24,6 +25,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(ROOT / "src" / "pre_question"))
+sys.path.insert(0, str(HERE))
+from mail_v2 import render_v2  # noqa: E402
 PROCESSED = ROOT / "data" / "processed"
 OUT = ROOT / "out"
 
@@ -101,6 +104,12 @@ class ArticlePicker:
             res = self._llm(q, as_of)
         self.cache[key] = res
         return res
+
+    def label(self, q):
+        for r in self.rules:
+            if r["match"] in q:
+                return r.get("label", "")
+        return ""
 
     def for_topic(self, topic, title, as_of, used=()):
         aud = audience_for(title)
@@ -182,6 +191,26 @@ def render(row, art, prev_event, send_by):
     return subject, "\n\n".join(lines)
 
 
+def load_staff():
+    """담당자 목록(가상, src/custom_mail/staff_directory.csv). 실제 운영 땐 이 표만 바꾸면 된다."""
+    with open(HERE / "staff_directory.csv", encoding="utf-8-sig", newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def assign_staff(staff, role, industry_major, company):
+    """산업군 대분류 코드가 맞는 담당자 → 없으면 '*' 담당자. 같은 회사는 항상 같은 사람."""
+    import zlib
+    pool = [s for s in staff if s["role"] == role]
+    code = (industry_major or "").split(" ")[0]
+    cand = [s for s in pool if code and code in s["industries"].split("|")] or [s for s in pool if s["industries"] == "*"] or pool
+    return cand[zlib.crc32(company.encode("utf-8")) % len(cand)]
+
+
+def josa_iga(word):
+    ch = word.strip()[-1]
+    return "이" if "가" <= ch <= "힣" and (ord(ch) - 0xAC00) % 28 else "가"
+
+
 def main(as_of_mode="send"):
     env = ROOT / ".env"
     if env.exists():
@@ -196,7 +225,16 @@ def main(as_of_mode="send"):
     inter = read("interactions.csv")
     surveys = {(s["event_id"], s["email"].strip().lower()): s for s in read("surveys.csv") if s.get("email")}
     picker = ArticlePicker()
+    staff = load_staff()
+    # 산업군(내부용, 팀원 data 브랜치 11/25): 영업 전달 패키지에만 쓰고 메일 본문에는 쓰지 않는다
+    industry = {}
+    pj = PROCESSED / "profiles.json"
+    if pj.exists():
+        for p in json.loads(pj.read_text(encoding="utf-8")):
+            industry[p["email"].strip().lower()] = (p.get("industry_major") or "", p.get("industry_mid") or "")
 
+    from collections import Counter as _C
+    same_co = _C((r["event_id"], r["company"]) for r in rows if r["branch"] != "THANKS_ONLY")
     mails, handoff = [], []
     for r in rows:
         if r["branch"] == "THANKS_ONLY":
@@ -218,14 +256,26 @@ def main(as_of_mode="send"):
             note = "맞는 글이 없어 담당자로 전환"
         if r["branch"] == "CUSTOM_TOPIC" and not art:
             note = "주제에 맞는 글 없음 → 맞춤 메일 생략, 관심 분야 기록"
-            mails.append({**_base(r), "subject": "", "body": "", "article": "", "article_reason": art_why,
-                          "note": note, "lint": ""})
+            mails.append({**_base(r), "subject": "", "body": "", "sentence_source": "", "assigned_staff": "", "article": "",
+                          "article_reason": art_why, "note": note, "lint": "", "subject_v1": "", "body_v1": ""})
             continue
-        subject, body = render(r, art, prev_event, send_by)
+        subject_v1, body_v1 = render(r, art, prev_event, send_by)
+        due = add_business_days(send_by, CONTACT_BUSINESS_DAYS)
+        ind_major = industry.get(r["email"], ("", ""))[0]
+        rep = None
+        if r["branch"] in ("SALES", "STAFF"):
+            rep = assign_staff(staff, r["branch"], ind_major if r["branch"] == "SALES" else "", r["company"])
+        sv = surveys.get((r["event_id"], r["email"]), {})
+        helpful = (sv.get("q4_helpful_content") or "").strip()
+        survey_line = f"설문에서 ‘{helpful}’{josa_iga(helpful)} 도움이 되었다고 남겨 주셔서 감사합니다." if helpful else ""
+        subject, body, src, co_note = render_v2(r, art, prev_event, due, picker.label(r["pre_question"]),
+                                                same_co[(r["event_id"], r["company"])], rep, survey_line)
         warns = lint(subject + "\n" + body)
-        mails.append({**_base(r), "subject": subject, "body": body,
+        mails.append({**_base(r), "subject": subject, "body": body, "sentence_source": src,
+                      "assigned_staff": f"{rep['name']} {rep['position']} ({rep['team']})" if rep else "",
                       "article": f"{art['content_id']} {art['title']}" if art else "",
-                      "article_reason": art_why, "note": note, "lint": "; ".join(warns)})
+                      "article_reason": art_why, "note": "; ".join(x for x in [note, co_note] if x),
+                      "lint": "; ".join(warns), "subject_v1": subject_v1, "body_v1": body_v1})
         if r["branch"] == "SALES":
             k = (r["event_id"], r["email"])
             s = surveys.get(k, {})
@@ -233,6 +283,7 @@ def main(as_of_mode="send"):
                     if i.get("email", "").strip().lower() == r["email"] and i["event_id"] == r["event_id"]]
             handoff.append({
                 "event": r["event_name"], "email": r["email"], "name": r["name"], "company": r["company"],
+                "industry": " / ".join(x for x in industry.get(r["email"], ("", "")) if x) or "미분류",
                 "title": r["title"], "pre_question": r["pre_question"], "sales_triggers": r["sales_triggers"],
                 "survey": (f"만족 {s.get('q1_satisfaction')} / 도움 {s.get('q2_helpfulness')} / 추천 {s.get('q3_recommend')} / "
                            f"도움된 내용 '{s.get('q4_helpful_content', '')}' / 듣고 싶은 주제 '{s.get('q5_wanted_topic', '')}' / "
@@ -241,6 +292,8 @@ def main(as_of_mode="send"):
                 "previous_event": prev_event,
                 "sent_article": f"{art['content_id']} {art['title']}" if art else "",
                 "contact_due": add_business_days(send_by, CONTACT_BUSINESS_DAYS).isoformat(),
+                "assigned_staff": f"{rep['name']} {rep['position']} ({rep['team']})" if rep else "",
+                "staff_email": rep["email"] if rep else "",
             })
 
     OUT.mkdir(exist_ok=True)
@@ -249,11 +302,60 @@ def main(as_of_mode="send"):
             w = csv.DictWriter(f, fieldnames=list(data[0].keys()))
             w.writeheader()
             w.writerows(data)
+    # 다음에 쓸 글 목록: 질문은 있었는데 메일 시점에 맞는 글이 없었던 것 (인터뷰: 맞는 글 없으면 관심 분야 기록)
+    gaps = {}
+    for m in mails:
+        q = m["pre_question"] or ""
+        if not m["body"] and m["branch"] == "CUSTOM_TOPIC":
+            key = "설문 주제: " + m["survey_topic"]
+        elif q and not m["article"]:
+            key = picker.label(q) or q
+        else:
+            continue
+        g = gaps.setdefault(key, {"topic": key, "people": 0, "executives": 0, "events": set(), "sample_question": q,
+                                  "matched_article_later": "", "earliest_event": "9999"})
+        g["people"] += 1
+        g["executives"] += any(t in m["title"] for t in ("대표", "전무", "부사장", "상무", "본부장", "실장", "이사"))
+        g["events"].add(m["event_id"])
+        g["earliest_event"] = min(g["earliest_event"], events[m["event_id"]]["event_date"])
+        why = m["article_reason"]
+        if "발행이라" in why:
+            g["matched_article_later"] = why.split(" → ")[0]
+    gap_rows = []
+    for g in sorted(gaps.values(), key=lambda x: -x["people"]):
+        gap_rows.append({"topic": g["topic"], "people": g["people"], "executives": g["executives"],
+                         "events": ",".join(sorted(g["events"])), "first_asked": g["earliest_event"],
+                         "sample_question": g["sample_question"],
+                         "status": ("글은 있지만 행사 뒤에 발행됨 — " + g["matched_article_later"]) if g["matched_article_later"] else "새로 써야 할 글",
+                         "suggestion": "다음 비슷한 행사 전에 발행하면 맞춤 메일에 바로 넣을 수 있음"})
+    if gap_rows:
+        with open(OUT / "content_gaps.csv", "w", encoding="utf-8-sig", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=list(gap_rows[0].keys()))
+            w.writeheader()
+            w.writerows(gap_rows)
+
+    # 기존(v1) vs 새 버전(v2) 비교: 갈래·글 유무·직함군별로 골고루 12통
+    seen, cmp_rows = set(), []
+    for m in mails:
+        k = (m["branch"], bool(m["article"]), any(t in m["title"] for t in ("대표", "전무", "상무", "부사장")), bool(m["pre_question"]))
+        if m["body"] and k not in seen and len(cmp_rows) < 12:
+            seen.add(k)
+            cmp_rows.append({"branch": m["branch"], "name": m["name"], "title": m["title"], "pre_question": m["pre_question"],
+                             "v1_subject": m["subject_v1"], "v1_body": m["body_v1"],
+                             "v2_subject": m["subject"], "v2_body": m["body"], "v2_sentence_source": m["sentence_source"]})
+    with open(OUT / "mail_compare.csv", "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(cmp_rows[0].keys()))
+        w.writeheader()
+        w.writerows(cmp_rows)
     from collections import Counter
+    print("문장 출처:", dict(Counter(m["sentence_source"].split(" (")[0] for m in mails if m["body"])))
     print(f"\n맞춤 메일 초안 {sum(1 for m in mails if m['body'])}통 →", dict(Counter(m["branch"] for m in mails if m["body"])))
-    print("글 없음으로 생략·전환:", sum(1 for m in mails if m["note"]))
+    print("글 없음으로 생략·전환:", sum(1 for m in mails if "글" in m["note"] and ("전환" in m["note"] or "생략" in m["note"])))
+    print("같은 회사 수신자 표시:", sum(1 for m in mails if "같은 회사" in m["note"]), "통")
     print("글쓰기 기준 경고:", sum(1 for m in mails if m["lint"]), "통")
     print(f"영업 전달 패키지 {len(handoff)}건 → out/sales_handoff.csv")
+    print(f"다음에 쓸 글 목록 {len(gap_rows)}개 주제 → out/content_gaps.csv")
+    print("설문 '도움된 내용' 문장 들어간 메일:", sum(1 for m in mails if "도움이 되었다고" in m["body"]), "통")
 
 
 def as_of(send_by, mode):
