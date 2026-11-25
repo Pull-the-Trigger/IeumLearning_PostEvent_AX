@@ -178,6 +178,34 @@ def load_answers(include_drafts):
     return usable
 
 
+def fact_check(r, subject, body, rep, due, contact_mode, art, survey_line):
+    """메일이 '그 사람이 실제로 한 일'과 '우리가 정한 약속'만 말하는지 확인 (사람이 읽기 전에 자동으로 거른다)."""
+    w = []
+    surveyed = bool(survey_line) or "설문" in r.get("sales_triggers", "")
+    if "남겨 주신" in subject and not r["pre_question"] and not r.get("survey_topic"):
+        w.append("사실: 제목에 '남겨 주신'인데 남긴 질문·설문이 없음")
+    if "신청하시며" in body and not r["pre_question"]:
+        w.append("사실: 신청 질문을 언급했는데 질문이 없음")
+    if "설문에서" in body and not surveyed:
+        w.append("사실: 설문을 언급했는데 설문 기록이 없음")
+    if r["consent"] != "Y":
+        if r["branch"] == "SALES" and contact_mode == "first" and "요청해 주셔서" not in body:
+            w.append("동의: 수신 미동의자에게 먼저 연락하는데 본인 요청이라는 이유가 없음")
+        if r["branch"] == "SALES" and contact_mode == "on_reply" and re.search(r"\d+월 \d+일까지 연락", body):
+            w.append("동의: 회신 오면 연락할 사람에게 날짜를 약속함")
+        if re.search(r"할인|무료|프로모션|특가|얼리버드", subject + body):
+            w.append("동의: 수신 미동의자에게 홍보 문구")
+    if rep and r["branch"] in ("SALES", "STAFF") and rep["name"] not in body:
+        w.append("약속: 배정 담당자 이름이 본문에 없음")
+    if r["branch"] in ("SALES", "STAFF") and contact_mode == "first" and f"{due.month}월 {due.day}일" not in body:
+        w.append("약속: 연락 날짜가 본문과 다름")
+    if art and art["title"] not in body:
+        w.append("글: 고른 글 제목이 본문에 없음")
+    if body.count("감사합니다") > 1:
+        w.append("문장: 감사 인사 중복")
+    return w
+
+
 def trigger_sentence(triggers):
     """질문 없는 영업 메일: 왜 연락하는지 그 사람이 남긴 사실로 한 문장."""
     if "설문 연락 희망" in triggers:
@@ -207,12 +235,27 @@ def main(as_of_mode="send", include_drafts=False):
     picker = ArticlePicker()
     staff = load_staff()
     answers = load_answers(include_drafts)
+    bank_all = json.loads((HERE / "answer_bank.json").read_text(encoding="utf-8"))["answers"]
     # 산업군(내부용, 팀원 data 브랜치 11/25): 영업 전달 패키지에만 쓰고 메일 본문에는 쓰지 않는다
     industry = {}
     pj = PROCESSED / "profiles.json"
     if pj.exists():
         for p in json.loads(pj.read_text(encoding="utf-8")):
             industry[p["email"].strip().lower()] = (p.get("industry_major") or "", p.get("industry_mid") or "")
+
+    def mode_of(r):  # 수신 미동의 영업 건은 회신 오면 연락 (설문 연락 요청은 예외)
+        return ("on_reply" if r["branch"] == "SALES" and r["consent"] != "Y"
+                and "설문 연락 희망" not in r["sales_triggers"] else "first")
+
+    # 여러 행사에 온 사람: 앞 행사에서 이미 영업 담당자를 안내했으면, 다음 행사 메일은 '이어서'로 쓴다
+    prior_sales = {}   # (event_id, email) -> 앞서 담당자를 안내한 행사 이름
+    seen = {}
+    for r in sorted(rows, key=lambda x: (events[x["event_id"]]["event_date"], x["event_id"])):
+        if r["branch"] == "SALES" and mode_of(r) == "first":
+            if r["email"] in seen:
+                prior_sales[(r["event_id"], r["email"])] = seen[r["email"]]
+            else:
+                seen[r["email"]] = r["event_name"]
 
     from collections import Counter as _C
     same_co = _C((r["event_id"], r["company"]) for r in rows if r["branch"] != "THANKS_ONLY")
@@ -233,11 +276,14 @@ def main(as_of_mode="send", include_drafts=False):
             art, art_why = picker.for_topic(r["survey_topic"], r["title"], as_of(send_by, as_of_mode))
         note = ""
         if r["branch"] == "ARTICLE" and not art:
-            r = {**r, "branch": "STAFF"}
-            note = "맞는 글이 없어 담당자로 전환"
+            if answers.get(picker.label(r["pre_question"])):
+                note = "맞는 글은 없지만 근거 있는 답변이 있어 답변만 보냄"
+            else:
+                r = {**r, "branch": "STAFF"}
+                note = "맞는 글도 답변도 없어 담당자로 전환"
         if r["branch"] == "CUSTOM_TOPIC" and not art:
             note = "주제에 맞는 글 없음 → 맞춤 메일 생략, 관심 분야 기록"
-            mails.append({**_base(r), "subject": "", "body": "", "sentence_source": "", "answer": "", "assigned_staff": "", "article": "",
+            mails.append({**_base(r), "subject": "", "body": "", "sentence_source": "", "answer": "", "assigned_staff": "", "contact_mode": "", "promise_due": "", "article": "",
                           "article_reason": art_why, "note": note, "lint": ""})
             continue
         due = add_business_days(send_by, CONTACT_BUSINESS_DAYS)
@@ -250,16 +296,24 @@ def main(as_of_mode="send", include_drafts=False):
         survey_line = f"설문에서 ‘{helpful}’{josa_iga(helpful)} 도움이 되었다고 남겨 주셔서 감사합니다." if helpful else ""
         label = picker.label(r["pre_question"])
         ans = answers.get(label, {}) if r["pre_question"] and r["branch"] in ("SALES", "ARTICLE") else {}
+        staff_why = "sensitive" if bank_all.get(label, {}).get("status") == "not_for_first_mail" else "no_basis"
+        # 수신 미동의자의 영업 건: 먼저 연락하지 않고 회신 오면 연락 (설문에서 직접 연락을 요청한 경우는 예외)
+        contact_mode = mode_of(r)
+        continued_from = prior_sales.get((r["event_id"], r["email"]), "") if r["branch"] == "SALES" else ""
         subject, body, src, co_note = render_mail(r, art, prev_event, due, label,
-                                                same_co[(r["event_id"], r["company"])], rep, survey_line,
-                                                ans.get("text", ""), trigger_sentence(r["sales_triggers"]))
+                                                  same_co[(r["event_id"], r["company"])], rep, survey_line,
+                                                  ans.get("text", ""), trigger_sentence(r["sales_triggers"]), staff_why, contact_mode,
+                                                  continued_from)
         if ans.get("status") == "draft":
             lvl = {"strong": "근거 충분", "partial": "근거 일부 — 보강 필요"}.get(ans.get("basis_level"), "")
             co_note = "; ".join(x for x in [co_note, f"검수 전 답변 포함({lvl}) — 승인 필요"] if x)
-        warns = lint(subject + "\n" + body)
+        warns = lint(subject + "\n" + body) + fact_check(r, subject, body, rep, due, contact_mode, art, survey_line)
         mails.append({**_base(r), "subject": subject, "body": body, "sentence_source": src,
                       "answer": ans.get("status", ""),
                       "assigned_staff": f"{rep['name']} {rep['position']} ({rep['team']})" if rep else "",
+                      "contact_mode": ({"on_reply": "회신 오면 연락 (수신 미동의)", "first": "먼저 연락"}[contact_mode]
+                                       + (f" — 이어서 (앞서 {continued_from}에서 담당자 안내)" if continued_from else "")) if r["branch"] == "SALES" else "",
+                      "promise_due": due.isoformat() if r["branch"] in ("SALES", "STAFF") and contact_mode == "first" else "",
                       "article": f"{art['content_id']} {art['title']}" if art else "",
                       "article_reason": art_why, "note": "; ".join(x for x in [note, co_note] if x),
                       "lint": "; ".join(warns)})
@@ -278,7 +332,9 @@ def main(as_of_mode="send", include_drafts=False):
                 "past_contacts": " | ".join(recs) or "없음",
                 "previous_event": prev_event,
                 "sent_article": f"{art['content_id']} {art['title']}" if art else "",
-                "contact_due": add_business_days(send_by, CONTACT_BUSINESS_DAYS).isoformat(),
+                "contact_mode": "회신 오면 연락 (수신 미동의 — 먼저 연락하지 말 것)" if contact_mode == "on_reply" else "먼저 연락",
+                "sales_status": f"이미 진행 중 — {continued_from}에서 담당자 안내함, 새 질문 추가" if continued_from else "신규",
+                "contact_due": add_business_days(send_by, CONTACT_BUSINESS_DAYS).isoformat() if contact_mode == "first" else "",
                 "assigned_staff": f"{rep['name']} {rep['position']} ({rep['team']})" if rep else "",
                 "staff_email": rep["email"] if rep else "",
             })
@@ -321,6 +377,23 @@ def main(as_of_mode="send", include_drafts=False):
             w.writeheader()
             w.writerows(gap_rows)
 
+    # 답변집 후보: 질문 사전에 없던(처음 보는) 질문을 모아 몇 번 나왔는지 센다.
+    # 2번 이상(여러 사람·여러 행사) 나온 질문 → 답변집 후보. 1번뿐인 질문 → 담당자가 개별 답변으로 끝.
+    unseen = {}
+    for r in rows:
+        if r.get("question_source") in ("llm", "default") and r["pre_question"]:
+            key = " ".join(r["pre_question"].split())
+            u = unseen.setdefault(key, {"question": key, "count": 0, "events": set(), "branch": r["branch"],
+                                        "reason": r.get("question_reason", "")})
+            u["count"] += 1
+            u["events"].add(r["event_id"])
+    with open(OUT / "answer_bank_candidates.csv", "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["question", "count", "events", "branch", "ai_reason", "next_step"])
+        for u in sorted(unseen.values(), key=lambda x: (-x["count"], x["question"])):
+            w.writerow([u["question"], u["count"], ",".join(sorted(u["events"])), u["branch"], u["reason"],
+                        "답변집 후보 — 담당자가 답 쓰고 근거 달기" if u["count"] >= 2 else "담당자 개별 답변으로 끝"])
+
     # 답변 재료집 검수표: 승인하는 사람이 답변과 근거를 한 줄씩 확인
     bank = json.loads((HERE / "answer_bank.json").read_text(encoding="utf-8"))["answers"]
     with open(OUT / "answer_bank_review.csv", "w", encoding="utf-8-sig", newline="") as f:
@@ -334,12 +407,17 @@ def main(as_of_mode="send", include_drafts=False):
     from collections import Counter
     print("문장 출처:", dict(Counter(m["sentence_source"].split(" (")[0] for m in mails if m["body"])))
     print(f"\n맞춤 메일 초안 {sum(1 for m in mails if m['body'])}통 →", dict(Counter(m["branch"] for m in mails if m["body"])))
-    print("글 없음으로 생략·전환:", sum(1 for m in mails if "글" in m["note"] and ("전환" in m["note"] or "생략" in m["note"])))
+    print("글 없음 → 답변만 보냄:", sum(1 for m in mails if "답변만 보냄" in m["note"]),
+          "/ 담당자로 전환:", sum(1 for m in mails if "담당자로 전환" in m["note"]),
+          "/ 맞춤 메일 생략:", sum(1 for m in mails if "생략" in m["note"]))
     print("같은 회사 수신자 표시:", sum(1 for m in mails if "같은 회사" in m["note"]), "통")
-    print("글쓰기 기준 경고:", sum(1 for m in mails if m["lint"]), "통")
-    print(f"영업 전달 패키지 {len(handoff)}건 → out/sales_handoff.csv")
+    print("글쓰기 기준·사실 확인 경고:", sum(1 for m in mails if m["lint"]), "통 (0이 아니면 custom_mails.csv의 lint 칸을 보고 고친 뒤 보낼 것)")
+    print(f"영업 전달 패키지 {len(handoff)}건 → out/sales_handoff.csv"
+          f" (먼저 연락 {sum(1 for h in handoff if h['contact_mode'] == '먼저 연락')} / 회신 오면 연락 {sum(1 for h in handoff if h['contact_mode'] != '먼저 연락')}"
+          f" / 이미 진행 중인 사람의 새 행사 {sum(1 for h in handoff if h['sales_status'] != '신규')})")
     print(f"다음에 쓸 글 목록 {len(gap_rows)}개 주제 → out/content_gaps.csv")
     print("답변 재료집 검수표 → out/answer_bank_review.csv")
+    print(f"처음 보는 질문 {len(unseen)}종 (2번 이상 나온 답변집 후보 {sum(1 for u in unseen.values() if u['count'] >= 2)}종) → out/answer_bank_candidates.csv")
     print("설문 '도움된 내용' 문장 들어간 메일:", sum(1 for m in mails if "도움이 되었다고" in m["body"]), "통")
     print("답변 재료가 들어간 메일:", sum(1 for m in mails if m.get("answer")),
           "통" + ("" if include_drafts else " (승인된 답변만. 검수 전 답변까지 보려면 --include-drafts)"))

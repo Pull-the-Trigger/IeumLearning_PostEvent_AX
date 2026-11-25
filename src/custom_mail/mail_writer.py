@@ -102,7 +102,14 @@ def title_group(title):
     return "실무"
 
 
-def render_mail(row, art, prev_event, due, label, same_company_n, rep=None, survey_line="", answer="", trigger_line=""):
+STAFF_WHY = {
+    # 왜 바로 답하지 않는지 — 틀로 고정 (AI가 이유를 지어내지 않게)
+    "sensitive": "채용 공정성과 관련된 문제라, 일반적인 답을 그대로 드리기보다 저희가 검토해서 말씀드리는 것이 맞다고 판단했습니다.",
+    "no_basis": "이 부분은 실제 운영 사례를 확인해서 말씀드리는 것이 정확할 것 같습니다.",
+}
+
+
+def render_mail(row, art, prev_event, due, label, same_company_n, rep=None, survey_line="", answer="", trigger_line="", staff_why="no_basis", contact_mode="first", continued_from=""):
     """3덩어리: ① 인사 ② 감사·질문 받기·답변 재료·이유 ③ 약속·선택 질문·글 / 서명."""
     title = row.get("title") or ""
     name = f"{row['name']} {title}님" if title else f"{row['name']} 담당자님"
@@ -124,22 +131,39 @@ def render_mail(row, art, prev_event, due, label, same_company_n, rep=None, surv
     if br == "SALES":
         if q:
             mid += [L["ack"], answer]
-            mid.append("다만 구체적인 내용은 회사마다 출발점이 달라 상황을 여쭙고 말씀드리겠습니다." if answer else L["reason"])
+            if contact_mode == "on_reply":
+                mid.append("다만 구체적인 방법은 회사 상황에 따라 달라질 수 있습니다." if answer else L["reason"])
+            else:
+                mid.append("다만 구체적인 내용은 회사마다 출발점이 달라 상황을 여쭙고 말씀드리겠습니다." if answer else L["reason"])
             ask = L["ask"]
         else:
             mid.append(trigger_line or "남겨 주신 내용을 바탕으로 필요하신 부분을 여쭙고자 연락드립니다.")
             ask = "혹시 먼저 이야기 나누고 싶은 부분이 있으시면 회신으로 한 줄만 남겨 주십시오."
-        end.append(f"{who} {due.month}월 {due.day}일까지 연락드리겠습니다.")
-        if ask:
-            end.append(ask.replace("회신으로 한 줄만 남겨 주십시오.", "회신으로 한 줄만 남겨 주십시오. 그 내용을 기준으로 준비해서 연락드리겠습니다."))
+        if contact_mode == "on_reply":
+            # 수신 미동의자: 질문에는 답하고, 영업 연락은 고객이 회신으로 원할 때만 (인터뷰 수신 동의 기준)
+            end.append(f"회사 상황에 맞춰 더 자세히 안내받기를 원하시면 이 메일로 회신해 주십시오. 회신 주시면 {who} 연락드리겠습니다.")
+        elif continued_from and rep:
+            # 앞 행사에서 이미 담당자를 안내한 사람: 새로 약속하지 않고 이어서 (실제 통화 여부는 모르므로 '안내드린'까지만)
+            end.append(f"앞서 안내드린 {rep['team']} {rep['name']} {rep['position']}{_iga(rep['position'])} "
+                       f"이번 질문도 이어서 {due.month}월 {due.day}일까지 말씀드리겠습니다.")
+        else:
+            # 질문도 남기고 설문에서 연락도 요청한 사람: 왜 담당자가 연락하는지 밝힌다 (미동의자도 본인이 요청해서 연락하는 것)
+            why = "설문에서 담당자 연락도 요청해 주셔서, " if q and "담당자 연락을 요청" in trigger_line else ""
+            end.append(f"{why}{who} {due.month}월 {due.day}일까지 연락드리겠습니다.")
+            if ask:
+                end.append(ask.replace("회신으로 한 줄만 남겨 주십시오.", "회신으로 한 줄만 남겨 주십시오. 그 내용을 기준으로 준비해서 연락드리겠습니다."))
         if art:
             end.append("관련 글도 함께 보내 드립니다." + link)
     elif br == "ARTICLE":
         mid += [L["ack"], answer]
-        end.append(("더 자세한 내용은 이 글에 정리되어 있습니다." if answer else (L["reason"] or "이 질문을 다룬 글을 전해 드립니다.")) + link)
-        end.append("궁금하신 점은 이 메일로 회신해 주십시오.")
+        if art:
+            end.append(("더 자세한 내용은 이 글에 정리되어 있습니다." if answer else (L["reason"] or "이 질문을 다룬 글을 전해 드립니다.")) + link)
+        end.append("더 궁금하신 점은 이 메일로 회신해 주십시오." if not art else "궁금하신 점은 이 메일로 회신해 주십시오.")
     elif br == "STAFF":
-        mid += [L["ack"], f"정확한 답변을 드리기 위해 {who} 확인한 뒤 따로 답변드리겠습니다."]
+        # 이유 → 누가 무엇을 확인해서 → 이 메일로 답변 (모두 틀로 고정). '영업 아님'은 말 대신 행동(메일로 답변)으로 보여 준다
+        what = "관련 사례를 확인해" if staff_why == "sensitive" else "정리해서"
+        mid += [L["ack"], STAFF_WHY.get(staff_why, STAFF_WHY["no_basis"]),
+                f"{who} {what} {due.month}월 {due.day}일까지 메일로 답변드리겠습니다."]
         if art:
             end.append("직접적인 답은 아니지만 참고가 될 만한 글을 먼저 전해 드립니다." + link)
         end.append("궁금하신 점은 이 메일로 회신해 주십시오.")
@@ -152,7 +176,15 @@ def render_mail(row, art, prev_event, due, label, same_company_n, rep=None, surv
     rest = [e for e in end if e not in prose]
     blocks = [hello, " ".join(x for x in mid if x), " ".join(prose)] + rest + ["이음러닝 마케팅본부장 한서윤 드림"]
     body = "\n\n".join(b for b in blocks if b)
-    topic = (label or L["subject_topic"]) if q else ("담당자 연락 요청" if br == "SALES" else row.get("survey_topic") or "관심 주제")
+    topic = (label or L["subject_topic"]) if q else row.get("survey_topic") or "관심 주제"
     subject = f"[이음러닝] {ev}에 남겨 주신 ‘{topic}’ 관련" + (" 글" if br in ("ARTICLE", "CUSTOM_TOPIC") else "")
+    if br == "SALES" and not q:
+        # 제목은 그 사람이 실제로 한 일만: 설문에 남긴 게 아니면 '남겨 주신'을 쓰지 않는다
+        if "담당자 연락을 요청" in trigger_line:
+            subject = f"[이음러닝] {ev} 설문에서 요청해 주신 담당자 연락 관련"
+        elif "도입을 검토" in trigger_line:
+            subject = f"[이음러닝] {ev} 설문에서 답해 주신 AI 교육 도입 검토 관련"
+        else:
+            subject = f"[이음러닝] {ev} 이후 연락드립니다"
     note = f"같은 회사 수신자 {same_company_n}명 — 문장이 겹치지 않는지 확인" if same_company_n > 1 else ""
     return subject, body, L["source"], note
