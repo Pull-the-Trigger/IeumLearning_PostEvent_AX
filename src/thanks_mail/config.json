@@ -1,0 +1,13 @@
+{
+  "send_days_after": 1,
+  "send_time": "09:00",
+  "exclude_events": ["E07"],
+  "links": {
+    "E01": {"slides": "https://example.com/slides/E01", "survey": "https://example.com/survey/E01"},
+    "E02": {"slides": "https://example.com/slides/E02", "survey": "https://example.com/survey/E02"},
+    "E03": {"slides": "https://example.com/slides/E03", "survey": "https://example.com/survey/E03"},
+    "E04": {"slides": "https://example.com/slides/E04", "survey": "https://example.com/survey/E04"},
+    "E05": {"slides": "https://example.com/slides/E05", "survey": "https://example.com/survey/E05"},
+    "E06": {"slides": "https://example.com/slides/E06", "survey": "https://example.com/survey/E06"}
+  }
+}

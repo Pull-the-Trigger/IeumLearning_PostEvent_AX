@@ -227,3 +227,4 @@ data/raw/*.xlsx
 !data/raw/01_참가자명단_E07_테스트행사.xlsx
 data/processed/
 .DS_Store
+out/
