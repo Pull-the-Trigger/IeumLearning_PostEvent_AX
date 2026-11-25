@@ -1,6 +1,6 @@
 {
-  "send_days_after": 1,
-  "send_time": "09:00",
+  "send_by_days_after": 1,
+  "send_by_time": "12:00",
   "exclude_events": ["E07"],
   "links": {
     "E01": {"slides": "https://example.com/slides/E01", "survey": "https://example.com/survey/E01"},

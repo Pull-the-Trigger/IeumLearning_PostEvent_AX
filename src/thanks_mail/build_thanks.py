@@ -3,7 +3,7 @@
   python src/thanks_mail/build_thanks.py
 
 입력: data/processed/ 의 profiles.json, events.csv, surveys.csv (src/data/build_profile.py 결과)
-설정: src/thanks_mail/config.json (발송 시각, 제외 행사, 행사별 링크)
+설정: src/thanks_mail/config.json (발송 기한, 제외 행사, 행사별 링크)
 문안: src/thanks_mail/template.txt (제목·본문·설문 문단 두 가지), signature.txt (서명)
 출력: out/thanks_mails.csv (본부장 검토용 초안, status=draft)
 
@@ -25,7 +25,7 @@ PROCESSED = ROOT / "data" / "processed"
 OUT = ROOT / "out" / "thanks_mails.csv"
 
 COLUMNS = ["event_id", "event_name", "email", "name", "company", "title", "consent",
-           "mail_type", "survey_included", "send_at", "status", "subject", "body"]
+           "mail_type", "survey_included", "send_by", "status", "subject", "body"]
 
 SURVEY_SLOT = "{설문 문단}"
 SIGNATURE_SLOT = "{서명}"
@@ -101,10 +101,11 @@ def main():
     args = ap.parse_args()
 
     cfg = json.loads(Path(args.config).read_text(encoding="utf-8"))
-    days_after = int(cfg.get("send_days_after", 1))
-    send_time = cfg.get("send_time", "09:00")
-    if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", send_time):
-        sys.exit(f"[오류] config.json send_time 형식은 HH:MM 입니다: {send_time!r}")
+    # send_by = 발송 기한 (예약 발송은 하지 않음). 기한 안 = 보낸 시각 < send_by
+    days_after = int(cfg.get("send_by_days_after", 1))
+    by_time = cfg.get("send_by_time", "12:00")
+    if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", by_time):
+        sys.exit(f"[오류] config.json send_by_time 형식은 HH:MM 입니다: {by_time!r}")
     exclude = set(cfg.get("exclude_events", []))
     links = cfg.get("links", {})
     for eid, l in links.items():
@@ -143,11 +144,11 @@ def main():
                                event_name=ev["event_name"], event_date=ev["event_date"],
                                slides=links[eid]["slides"], survey=links[eid]["survey"],
                                include_survey=include)
-        send_at = f"{(date.fromisoformat(ev['event_date']) + timedelta(days=days_after)).isoformat()} {send_time}"
+        send_by = f"{(date.fromisoformat(ev['event_date']) + timedelta(days=days_after)).isoformat()} {by_time}"
         rows.append({"event_id": eid, "event_name": ev["event_name"], "email": email,
                      "name": p["name"], "company": p.get("company") or "", "title": p.get("title") or "",
                      "consent": p.get("consent") or "", "mail_type": "thanks",
-                     "survey_included": "Y" if include else "N", "send_at": send_at,
+                     "survey_included": "Y" if include else "N", "send_by": send_by,
                      "status": "draft", "subject": subject, "body": body})
         for w in lint(subject + "\n" + body):
             warnings.append(f"{eid}/{email}: {w}")
