@@ -1,0 +1,8 @@
+staff_id,name,team,position,role,email,industries,note
+S01,김도현,영업1팀,매니저,SALES,dohyun.kim@ieumlearning.example,C,가상 데이터(시연용) - 제조업 담당
+S02,이수진,영업1팀,매니저,SALES,sujin.lee@ieumlearning.example,C,가상 데이터(시연용) - 제조업 담당
+S03,박준영,영업2팀,매니저,SALES,junyoung.park@ieumlearning.example,J|M|K,가상 데이터(시연용) - 정보통신·전문서비스·금융 담당
+S04,최유나,영업2팀,매니저,SALES,yuna.choi@ieumlearning.example,G|H|F|B|D|E|I|L|N|P|Q|R|S,가상 데이터(시연용) - 유통·운수·건설 등 담당
+S05,정민호,영업2팀,팀장,SALES,minho.jung@ieumlearning.example,*,가상 데이터(시연용) - 산업군 미분류 담당
+C01,한지원,교육컨설팅팀,컨설턴트,STAFF,jiwon.han@ieumlearning.example,*,가상 데이터(시연용) - 담당자 확인 질문 응대
+C02,오세라,교육컨설팅팀,책임컨설턴트,STAFF,sera.oh@ieumlearning.example,*,가상 데이터(시연용) - 담당자 확인 질문 응대
