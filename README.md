@@ -38,9 +38,12 @@ out/                   # 메일 초안·분류 결과
 
 - **브랜치**
   - `main`: 발표·배포용. PR로만 합칩니다.
-  - `develop`: 통합 브랜치
-  - 이름/작업 브랜치: `develop`에서 따고, PR로 합친 뒤 삭제합니다.
-- **커밋 메시지**: `feat:` 기능 / `fix:` 버그 수정 / `refactor:` 구조 변경 / `docs:` 문서
+  - `develop`: 모두의 최신 코드
+  - 개인 브랜치: `nahye`, `somin`, `sumin` (계속 사용합니다)
+- **작업 흐름**
+  - 개인 브랜치에서 작업하고, 하루 한 번 또는 기능 하나가 끝날 때마다 `develop`으로 PR을 엽니다.
+  - `develop`의 최신 내용은 자주 받습니다: `git merge origin/develop`
+- **커밋 메시지**: `feat:` 기능 / `fix:` 버그 수정 / `refactor:` 구조 변경 / `docs:` 문서 / `chore:` 설정·정리 (.gitignore, 패키지 목록 등)
 - 코드를 바꾼 사람이 같은 PR에서 관련 문서(docs, README, requirements)도 함께 고칩니다.
 
 ## 문서

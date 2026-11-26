@@ -4,3 +4,4 @@ out/
 *.tsbuildinfo
 .env*
 coverage/
+next-env.d.ts
