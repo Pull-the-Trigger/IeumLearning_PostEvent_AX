@@ -1,6 +1,6 @@
 """테스트 회신(expected 포함)으로 분류 정확도를 잰다.
 
-  python src/reply_classifier/evaluate.py data/test/test_replies.json
+  python backend/reply_classifier/evaluate.py data/test/test_replies.json
 
 FACT 정답 중 '정보 없으면 STAFF'처럼 둘 다 허용되는 경계 사례는 note에 적혀 있고,
 여기서는 엄격하게 expected.category와 같은지만 본다.

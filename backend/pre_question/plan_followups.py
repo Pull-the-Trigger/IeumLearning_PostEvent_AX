@@ -1,11 +1,11 @@
 """출석자별 후속 연락 계획: 영업 / 글 안내 / 담당자 / 맞춤(설문 주제) / 감사 메일만.
 
 사용법 (레포 루트에서):
-  python src/pre_question/plan_followups.py [--out out/followup_plan]
+  python backend/pre_question/plan_followups.py [--out out/followup_plan]
 
 입력: data/processed/ 의 participation.csv, surveys.csv, interactions.csv, events.csv
      (build_profile.py가 만든 표준 표 — 명단 열 이름이 달라도 여기선 같은 이름)
-설정: src/pre_question/question_map.json (질문 → 갈래)
+설정: backend/pre_question/question_map.json (질문 → 갈래)
 
 판단 순서 (11/25 팀 결정):
   1. 영업 신호가 하나라도 있으면 SALES

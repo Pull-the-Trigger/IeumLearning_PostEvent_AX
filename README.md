@@ -11,7 +11,7 @@ data/
 └── processed/    # 실행 결과 (GitHub 미업로드)
 docs/
 └── data-schema.md        # 데이터 테이블 구조와 규칙
-src/
+backend/
 └── data/
     ├── build_profile.py      # 원본 → 통합 프로필 (메인 실행 파일)
     ├── mapping.json          # 열 이름 사전, 값 변환 규칙
@@ -26,7 +26,7 @@ src/
 
 ### 데이터 준비
 1. 원본 엑셀을 `data/raw/`에 넣기
-2. `python src/data/build_profile.py`
+2. `python backend/data/build_profile.py`
 3. 결과: `data/processed/profiles.json`
 
 자세한 구조와 규칙은 [docs/data-schema.md](docs/data-schema.md)를 봐 주세요.

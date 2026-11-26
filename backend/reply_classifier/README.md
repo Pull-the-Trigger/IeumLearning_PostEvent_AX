@@ -5,7 +5,7 @@
 
 ## 폴더 구조
 ```
-src/reply_classifier/
+backend/reply_classifier/
   rules.py             1차 규칙 분류 (인터뷰 9·10번 기준 표현만 사용, 사람·회사 이름 없음)
   llm.py               규칙으로 판단 못 한 회신만 OpenAI Structured Outputs로 분류 (키 없으면 건너뜀)
   classify_replies.py  실행 파일: 분류 → 처리 할 일 → 승인 방식 → 답장 초안
@@ -41,11 +41,11 @@ out/                   실행 결과 (깃에 안 올려도 됨)
 ## 실행 (레포 루트에서)
 ```
 pip install openai          # AI 분류를 쓸 때만
-python src/reply_classifier/classify_replies.py data/test/test_replies.json
-python src/reply_classifier/evaluate.py data/test/test_replies.json
+python backend/reply_classifier/classify_replies.py data/test/test_replies.json
+python backend/reply_classifier/evaluate.py data/test/test_replies.json
 ```
 입력 파일에는 `sender_email`, `subject`, `body` 세 열만 있으면 됩니다.
-명단이 바뀌면 `src/data/build_profile.py`로 `profiles.json`만 다시 만들면 돼요.
+명단이 바뀌면 `backend/data/build_profile.py`로 `profiles.json`만 다시 만들면 돼요.
 
 ## API 키
 레포 루트 `.env`에 `OPENAI_API_KEY=...` 형태로 넣습니다. `.env`는 `.gitignore`에 들어 있어요. **절대 커밋하지 마세요.**

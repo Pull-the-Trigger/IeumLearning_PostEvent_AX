@@ -5,10 +5,10 @@
 
 ## 실행 (레포 루트에서)
 ```
-python src/custom_mail/build_mails.py              # 메일 보내는 날까지 발행된 글만 사용 (실제 상황)
-python src/custom_mail/build_mails.py --as-of today # 지금 있는 글 전부 사용 (다음 행사 시연용)
+python backend/custom_mail/build_mails.py              # 메일 보내는 날까지 발행된 글만 사용 (실제 상황)
+python backend/custom_mail/build_mails.py --as-of today # 지금 있는 글 전부 사용 (다음 행사 시연용)
 ```
-내부에서 `src/pre_question/plan_followups.py`를 먼저 돌려 출석자별 갈래를 정합니다.
+내부에서 `backend/pre_question/plan_followups.py`를 먼저 돌려 출석자별 갈래를 정합니다.
 
 ## 결과
 - `out/custom_mails.csv`: 행사·사람별 메일 초안 (제목, 본문, 고른 글과 이유, 승인 방식, 글쓰기 기준 경고)
@@ -45,7 +45,7 @@ python src/custom_mail/build_mails.py --as-of today # 지금 있는 글 전부 �
 - **질문 없는 영업 메일:** 왜 연락하는지 그 사람이 남긴 사실로 한 문장 넣습니다 (설문 연락 요청 / 도입 검토 / 행사장 대화).
 
 ```
-python src/custom_mail/build_mails.py --include-drafts   # 검수 전 답변까지 넣어 미리 보기
+python backend/custom_mail/build_mails.py --include-drafts   # 검수 전 답변까지 넣어 미리 보기
 ```
 
 ## 고객에게 요청할 자료 (지금은 예시로 채워 둠)

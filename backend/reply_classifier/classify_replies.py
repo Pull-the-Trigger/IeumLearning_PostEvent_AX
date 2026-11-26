@@ -1,7 +1,7 @@
 """회신 메일 분류 + 처리 할 일 + 답장 초안.
 
 사용법 (레포 루트에서):
-  python src/reply_classifier/classify_replies.py <회신.json 또는 .csv> [--out out/reply_results]
+  python backend/reply_classifier/classify_replies.py <회신.json 또는 .csv> [--out out/reply_results]
 
 입력: 회신 메일 목록. 필요한 열은 sender_email, subject, body 세 개뿐이다
      (in_reply_to, reply_id가 있으면 같이 쓴다). 다른 열은 무시한다.

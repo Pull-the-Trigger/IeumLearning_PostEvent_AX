@@ -1,7 +1,7 @@
 """출석자별 맞춤 메일 초안 + 영업 전달 패키지.
 
-  python src/custom_mail/build_mails.py              # 메일 보내는 날까지 발행된 글만 사용 (실제 상황)
-  python src/custom_mail/build_mails.py --as-of today # 지금 있는 글 전부 사용 (다음 행사 시연용)
+  python backend/custom_mail/build_mails.py              # 메일 보내는 날까지 발행된 글만 사용 (실제 상황)
+  python backend/custom_mail/build_mails.py --as-of today # 지금 있는 글 전부 사용 (다음 행사 시연용)
 
 1. plan_followups로 출석자별 갈래를 정한다 (영업 / 글 안내 / 담당자 / 사실 / 설문 주제 / 감사 메일만)
 2. 글을 고른다 — 사전 질문: question_map.json의 article (검수된 짝)
@@ -24,7 +24,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-sys.path.insert(0, str(ROOT / "src" / "pre_question"))
+sys.path.insert(0, str(ROOT / "backend" / "pre_question"))
 sys.path.insert(0, str(HERE))
 from mail_writer import render_mail  # noqa: E402
 PROCESSED = ROOT / "data" / "processed"
@@ -83,7 +83,7 @@ def lint(text):
 class ArticlePicker:
     def __init__(self):
         self.arts = {a["content_id"]: a for a in read("contents.csv")}
-        rules = json.loads((ROOT / "src" / "pre_question" / "question_map.json").read_text(encoding="utf-8"))["rules"]
+        rules = json.loads((ROOT / "backend" / "pre_question" / "question_map.json").read_text(encoding="utf-8"))["rules"]
         self.rules = rules
         self.cache = {}
 
@@ -140,7 +140,7 @@ class ArticlePicker:
 
 
 def load_staff():
-    """담당자 목록(가상, src/custom_mail/staff_directory.csv). 실제 운영 땐 이 표만 바꾸면 된다."""
+    """담당자 목록(가상, backend/custom_mail/staff_directory.csv). 실제 운영 땐 이 표만 바꾸면 된다."""
     with open(HERE / "staff_directory.csv", encoding="utf-8-sig", newline="") as f:
         return list(csv.DictReader(f))
 

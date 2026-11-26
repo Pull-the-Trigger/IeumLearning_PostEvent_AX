@@ -1,6 +1,6 @@
 """사전 질문 시험지로 '문장 사전만' vs '사전 + AI'를 비교 채점한다.
 
-  python src/pre_question/evaluate_pre.py data/test/pre_question_tests.json
+  python backend/pre_question/evaluate_pre.py data/test/pre_question_tests.json
 
 strict  = 정답(expected)과 같아야 맞음
 lenient = 허용 정답(acceptable) 중 하나면 맞음 (경계 사례용)

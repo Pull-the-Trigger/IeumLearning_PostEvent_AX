@@ -5,8 +5,8 @@
 
 ## 실행 (레포 루트에서)
 ```
-python src/data/build_profile.py        # 먼저 data/processed/ 를 만든다 (이미 있으면 생략)
-python src/thanks_mail/build_thanks.py
+python backend/data/build_profile.py        # 먼저 data/processed/ 를 만든다 (이미 있으면 생략)
+python backend/thanks_mail/build_thanks.py
 ```
 - 입력: `data/processed/profiles.json`, `events.csv`, `surveys.csv`
 - 출력: `out/thanks_mails.csv` (UTF-8 BOM이라 엑셀에서 바로 열림). `out/`에는 참석자 정보가 들어 있어 `.gitignore`로 올리지 않습니다.

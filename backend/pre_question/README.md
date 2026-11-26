@@ -11,7 +11,7 @@
 
 ## 실행
 ```
-python src/pre_question/plan_followups.py
+python backend/pre_question/plan_followups.py
 ```
 - 새 행사에 처음 보는 질문이 오면: AI 키가 있으면 AI가 분류하고, 없으면 담당자로 보냅니다. 끝나면 "질문 사전에 없는 질문 N건"을 알려 주니 `question_map.json`에 한 줄씩 추가하세요.
 - 설문에서 연락을 원했지만 이메일이 없는 사람은 `out/followup_plan_contact_needed.csv`로 따로 나옵니다. 짐작해서 매칭하지 않습니다.

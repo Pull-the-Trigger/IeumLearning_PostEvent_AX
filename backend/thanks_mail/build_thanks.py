@@ -1,10 +1,10 @@
 """행사별 참석자 감사 메일 초안.
 
-  python src/thanks_mail/build_thanks.py
+  python backend/thanks_mail/build_thanks.py
 
-입력: data/processed/ 의 profiles.json, events.csv, surveys.csv (src/data/build_profile.py 결과)
-설정: src/thanks_mail/config.json (발송 기한, 제외 행사, 행사별 링크)
-문안: src/thanks_mail/template.txt (제목·본문·설문 문단 두 가지), signature.txt (서명)
+입력: data/processed/ 의 profiles.json, events.csv, surveys.csv (backend/data/build_profile.py 결과)
+설정: backend/thanks_mail/config.json (발송 기한, 제외 행사, 행사별 링크)
+문안: backend/thanks_mail/template.txt (제목·본문·설문 문단 두 가지), signature.txt (서명)
 출력: out/thanks_mails.csv (본부장 검토용 초안, status=draft)
 
 - 대상: 각 행사의 참석자(attended=Y) 전원, 수신 동의와 상관없이. 제외 행사(E07 등)는 뺀다.

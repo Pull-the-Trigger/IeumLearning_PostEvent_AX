@@ -1,20 +1,20 @@
 """회사 → KSIC 중분류 분류 (내부용: 영업 전달 카드, 성과 분석, 고객군 제안. 고객 메일 문장에는 쓰지 않음).
 
 분류 순서
-  1. src/data/industry_manual.json 사람이 수정한 값 {company_key: 중분류 코드} → source=manual (LLM 안 부름, 2보다 우선)
-  2. src/data/industry_llm.json    지난 LLM 결과 {company_key: 중분류 코드 또는 ""} → source=llm
+  1. backend/data/industry_manual.json 사람이 수정한 값 {company_key: 중분류 코드} → source=manual (LLM 안 부름, 2보다 우선)
+  2. backend/data/industry_llm.json    지난 LLM 결과 {company_key: 중분류 코드 또는 ""} → source=llm
   3. 둘 다 없으면 빈칸. 기본 실행에서 OPENAI_API_KEY 가 있으면 1·2 어디에도 없는 회사만 LLM(OpenAI)에 물어 2에 추가
      (--no-classify 로 끌 수 있음)
-틀린 값은 src/data/industry_manual.json 에 직접 고쳐 넣으면 다음 실행부터 반영됩니다.
+틀린 값은 backend/data/industry_manual.json 에 직접 고쳐 넣으면 다음 실행부터 반영됩니다.
 대분류는 LLM에 묻지 않고 ksic.json 에서 중분류로 찾습니다.
 """
 import json
 import os
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # 저장소 루트 (src/data/ 의 두 단계 위)
-KSIC_PATH = os.path.join(ROOT, "src", "data", "ksic.json")
-MANUAL_PATH = os.path.join(ROOT, "src", "data", "industry_manual.json")
-LLM_PATH = os.path.join(ROOT, "src", "data", "industry_llm.json")
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # 저장소 루트 (backend/data/ 의 두 단계 위)
+KSIC_PATH = os.path.join(ROOT, "backend", "data", "ksic.json")
+MANUAL_PATH = os.path.join(ROOT, "backend", "data", "industry_manual.json")
+LLM_PATH = os.path.join(ROOT, "backend", "data", "industry_llm.json")
 ENV_PATH = os.path.join(ROOT, ".env")
 DEFAULT_MODEL = "gpt-4.1-mini"  # 단순 분류라 가벼운 모델. .env 의 OPENAI_MODEL 로 바꿀 수 있음
 BATCH_SIZE = 50
@@ -162,7 +162,7 @@ def resolve(company_keys, manual, llm, ksic, err):
     out = {}
     for k in company_keys:
         if k in manual:
-            code, source, where = manual[k], "manual", "src/data/industry_manual.json"
+            code, source, where = manual[k], "manual", "backend/data/industry_manual.json"
         elif k in llm:
             code, source, where = llm[k], "llm", "LLM"
         else:
