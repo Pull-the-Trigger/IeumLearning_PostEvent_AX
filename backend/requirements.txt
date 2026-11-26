@@ -1,0 +1,6 @@
+# 백엔드 필수 패키지 (저장소 루트에서: pip install -r backend/requirements.txt)
+pandas>=2.3,<4      # 엑셀 → 표 변환 (2.3.3에서 확인, data-schema.md 기준 3.x도 동작)
+openpyxl>=3.1,<4    # pandas가 .xlsx를 읽고 쓸 때 쓰는 엔진 (3.1.5에서 확인)
+
+# 선택: LLM(OpenAI) 분류·문장 생성을 쓸 때만 설치 (없으면 LLM 없이 실행됨)
+# openai>=1.0

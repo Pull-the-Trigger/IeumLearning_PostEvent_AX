@@ -152,23 +152,16 @@ E03·E06의 `No`(순번) 열은 무시합니다.
 
 ## 실행 방법
 
-> **실행 전 각자 가진 원본 엑셀을 `data/raw/` 에 넣어주세요.** (원본은 깃헙에 올라가지 않습니다)
+> **실행 전 각자 가진 원본 엑셀을 `data/raw/` 에 넣어주세요.** (원본은 GitHub에 올리지 않습니다)
 
 pandas 2.x와 3.x 둘 다 됩니다 (2.3.3, 3.1.1에서 확인했고 결과 파일이 똑같이 나옵니다).
 빈칸은 pandas 버전과 상관없이 항상 None(JSON에서는 `null`)으로 저장되고, JSON에 NaN이 섞이면 저장할 때 바로 오류가 납니다.
 
-```bash
-pip install pandas openpyxl
-pip install openai                       # 산업군 LLM 분류를 쓸 때만 필요
-python backend/data/build_profile.py              # 변환 + 산업군 분류 + 통합 프로필 + 확인 출력
-python backend/data/build_profile.py --no-classify  # LLM 산업군 분류 없이 실행
-python backend/data/build_profile.py --make-test  # 테스트 명단(E07)을 다시 만들 때
-python backend/data/make_ksic.py                  # KSIC 엑셀이 바뀌었을 때만 (backend/data/ksic.json 재생성)
-```
+설치와 실행 명령(`build_profile.py`의 `--no-classify`·`--make-test`, `make_ksic.py`)은 [backend/README.md](../backend/README.md)를 봐 주세요.
 
 - 기본 실행은 `industry_manual.json`·`industry_llm.json` 어디에도 없는 회사만 LLM으로 분류해 `industry_llm.json`에 쌓습니다.
   이미 모두 분류됐으면 LLM을 부르지 않습니다. `--no-classify`를 주면 LLM 없이 두 파일의 값만 씁니다.
-- LLM 설정: `.env`에 `OPENAI_API_KEY`, `OPENAI_MODEL`을 적는다 (`.env`는 깃헙에 올라가지 않음).
+- LLM 설정: `.env`에 `OPENAI_API_KEY`, `OPENAI_MODEL`을 적는다 (`.env`는 GitHub에 올리지 않음).
   `OPENAI_API_KEY`는 필수, `OPENAI_MODEL`은 선택(없으면 `gpt-4.1-mini`).
   키나 `openai` 패키지가 없으면 경고만 내고 미분류 회사는 빈칸으로 둔 채 정상 종료합니다.
 - 원본은 수정하지 않고 결과는 `data/processed/`에 저장합니다:

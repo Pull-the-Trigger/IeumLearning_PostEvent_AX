@@ -1,9 +1,14 @@
-# 회신 메일 분류 (reply_classifier) — 담당: 소민
+# 회신 메일 분류 (backend/reply_classifier)
 
-우리가 보낸 메일(감사 메일·맞춤 연락·정기 발송)에 고객이 회신하면, 분류하고 처리할 일과 답장 초안을 만듭니다.
-**모든 답장은 초안이에요.** 본부장 승인 전에는 발송하지 않습니다 (글쓰기 기준 06).
+담당: 소민 · 고객 회신을 분류하고 처리할 일과 답장 초안을 만듭니다.
 
-## 폴더 구조
+## 하는 일
+
+우리가 보낸 메일(감사 메일·맞춤 메일·정기 발송)에 고객이 회신하면, 분류하고 처리할 일과 답장 초안을 만듭니다.
+**모든 답장은 초안이에요.** 본부장 승인 전에는 발송하지 않습니다 (06 글쓰기 기준).
+
+## 입력·출력
+
 ```
 backend/reply_classifier/
   rules.py             1차 규칙 분류 (인터뷰 9·10번 기준 표현만 사용, 사람·회사 이름 없음)
@@ -11,12 +16,15 @@ backend/reply_classifier/
   classify_replies.py  실행 파일: 분류 → 처리 할 일 → 승인 방식 → 답장 초안
   evaluate.py          정답이 있는 테스트 회신으로 정확도 측정
 data/test/
-  test_replies.json    테스트 회신 27건 (보낸 사람은 실제 출석자, 본문은 가짜)
+  test_replies.json    테스트 회신 27건 (보낸 사람은 실제 출석자, 본문은 시연용 가짜 값)
   test_replies.csv     같은 내용, 엑셀 확인용
-out/                   실행 결과 (깃에 안 올려도 됨)
+out/                   실행 결과 (GitHub에 올리지 않음)
 ```
+입력 파일에는 `sender_email`, `subject`, `body` 세 열만 있으면 됩니다.
 
-## 분류 기준 (11/25 팀 결정)
+## 규칙과 근거
+
+### 분류 기준 (11/25 팀 결정)
 주제가 민감한지가 아니라 **답의 재료가 어디 있는가**로 나눕니다.
 - 재료가 상대 회사에 있다 (규모·부서·예산·내부 규정·인사 제도를 되물어야 함) → 영업
 - 재료가 우리 기록에 있다 (행사 일정·장소, 링크, 자료, 발행한 글) → AI 초안 → 본부장 승인
@@ -38,19 +46,17 @@ out/                   실행 결과 (깃에 안 올려도 됨)
 수신 미동의자에게는 답장에 서비스 소개·다음 행사·뉴스레터 권유를 넣지 말라는 표시가 붙습니다.
 대표·임원에게 보내는 답장은 "한 통씩 승인"으로 표시됩니다.
 
-## 실행 (레포 루트에서)
-```
-pip install openai          # AI 분류를 쓸 때만
-python backend/reply_classifier/classify_replies.py data/test/test_replies.json
-python backend/reply_classifier/evaluate.py data/test/test_replies.json
-```
-입력 파일에는 `sender_email`, `subject`, `body` 세 열만 있으면 됩니다.
-명단이 바뀌면 `backend/data/build_profile.py`로 `profiles.json`만 다시 만들면 돼요.
+## 결과(3분기)
 
-## API 키
-레포 루트 `.env`에 `OPENAI_API_KEY=...` 형태로 넣습니다. `.env`는 `.gitignore`에 들어 있어요. **절대 커밋하지 마세요.**
-
-## 현재 성능 (11/25, AI 키 없이 규칙만)
+### 현재 성능 (11/25, AI 키 없이 규칙만)
 - 테스트 27건: 26/27 (틀린 1건은 담당자로 넘어감). 규칙을 이 27건을 보고 만들었기 때문에 실제 성능보다 높게 나옵니다.
 - 처음 보는 회신 10건: 1/10. 9건 중 8건은 담당자로 넘어갔어요 (놓친 회신 0건). 1건은 영업으로 과하게 보냈습니다.
 - 결론: 규칙만으로는 담당자가 볼 회신이 너무 많아요. AI 분류를 켜야 실제로 쓸 수 있습니다.
+
+## 실행
+
+실행 명령은 [backend/README.md](../backend/README.md)를 봐 주세요 (저장소 루트에서 실행).
+명단이 바뀌면 `backend/data/build_profile.py`로 `profiles.json`만 다시 만들면 돼요.
+
+### API 키
+레포 루트 `.env`에 `OPENAI_API_KEY=...` 형태로 넣습니다. `.env`는 `.gitignore`에 들어 있어요. **절대 커밋하지 마세요.**
