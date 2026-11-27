@@ -150,6 +150,29 @@ E03·E06의 `No`(순번) 열은 무시합니다.
 
 ---
 
+## DB 구성
+
+위 7개 표를 SQLite DB 하나에 넣습니다. 설계도는 [backend/db/schema.sql](../backend/db/schema.sql)입니다.
+
+- **파일 위치**: 기본 `data/processed/ieum.db`. `.env`의 `DB_PATH`로 바꿀 수 있습니다 (`.env.example` 참고). `data/processed/`라서 GitHub에 올라가지 않습니다.
+- **표 7개** (열 이름은 위 표·CSV와 같음)
+
+| 표 | 기본 키 | 연결 (외래 키) |
+|---|---|---|
+| events | event_id (E01~) | |
+| companies | company_key | |
+| customers | email | company_key → companies, first_event_id·last_event_id → events |
+| participation | (event_id, email) | event_id → events, email → customers |
+| surveys | survey_id (S001~) | event_id → events, email → customers (익명이면 빈 값) |
+| interactions | interaction_id (I001~) | event_id → events, email → customers |
+| contents | content_id (C001~) | |
+
+- **실행 순서**: `build_profile.py` → `load.py` (명령은 [backend/README.md](../backend/README.md))
+  - `load.py`는 실행할 때마다 schema.sql 적용 → 표 비우기 → CSV 다시 넣기를 한 번에 처리합니다. 중간에 실패하면 전부 되돌려 DB는 실행 전 상태 그대로 남습니다.
+  - participation에서 테스트 행사 행(`is_test`)과 이메일 빈 행은 넣지 않고, 뺀 개수를 출력합니다.
+  - CSV의 빈 값은 NULL, `True`/`False`는 1/0으로 넣습니다.
+  - 외래 키는 연결할 때마다 켜야 해서 `backend/db/conn.py`의 `connect()`로 연결합니다.
+
 ## 실행 방법
 
 > **실행 전 각자 가진 원본 엑셀을 `data/raw/` 에 넣어주세요.** (원본은 GitHub에 올리지 않습니다)

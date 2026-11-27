@@ -22,6 +22,7 @@ python backend/data/build_profile.py                # 변환 + 산업군 분류 
 python backend/data/build_profile.py --no-classify  # LLM 산업군 분류 없이 실행
 python backend/data/build_profile.py --make-test    # 테스트 명단(E07)을 다시 만들 때
 python backend/data/make_ksic.py                    # KSIC 엑셀이 바뀌었을 때만 (backend/data/ksic.json 재생성)
+python backend/db/load.py                           # build_profile.py 다음에: data/processed/*.csv → SQLite (data/processed/ieum.db)
 ```
 
 ### 2. 감사 메일: `backend/thanks_mail/` → `out/thanks_mails.csv`
