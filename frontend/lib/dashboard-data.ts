@@ -9,7 +9,7 @@ export type ScheduleItem = { date: string; title: string; detail: string; status
 export const taskGroups: TaskGroup[] = [
   { groupId: "followUp", items: [{ label: "감사 메일", count: "2개 행사", href: "/follow-up/thank-you" }, { label: "개인 맞춤 메일", count: "17건", href: "/follow-up/personal-mail" }] },
   { groupId: "broadcast", items: [{ label: "뉴스레터", count: "1건", href: "/broadcast/newsletter" }, { label: "개인 맞춤 콘텐츠", count: "6건", href: "/broadcast/personal-content" }] },
-  { groupId: "requests", items: [{ label: "문의 답변", count: "8건", href: "/requests/replies" }, { label: "자료 전달", count: "2건", href: "/requests/materials" }] },
+  { groupId: "requests", items: [{ label: "문의 답변", count: "8건", href: "/requests/replies" }, { label: "부서 협업 관리", count: "2건", href: "/requests/collaboration" }] },
   { groupId: "sales", items: [{ label: "행사 성과 확인", count: "조회", href: "/sales/event-performance" }, { label: "영업 관리", count: "8명", href: "/sales/pipeline" }] },
 ];
 
