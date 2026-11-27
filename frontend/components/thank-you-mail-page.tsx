@@ -109,7 +109,7 @@ function formatDateValue(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function DatePicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+export function DatePicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const [open, setOpen] = useState(false);
   const [viewDate, setViewDate] = useState(() => parseLocalDate(value));
   const selectedDate = parseLocalDate(value);
