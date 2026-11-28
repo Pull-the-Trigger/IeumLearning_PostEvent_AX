@@ -13,6 +13,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 
 import pandas as pd
 
@@ -226,7 +227,7 @@ def load_participation(raw_dir):
                 "attended": convert_value(get("attended"), "attended", fname, excel_row, inv.get("attended")),
                 "consent": convert_value(get("consent"), "consent", fname, excel_row, inv.get("consent")),
                 "note": clean(get("note")),
-                "source_file": fname,
+                "source_file": unicodedata.normalize("NFC", fname),  # Mac 파일 이름의 한글 자모 분리(NFD) 정리
                 "source_row": excel_row,
                 "is_test": event_id in MAP["test_events"],
             }
