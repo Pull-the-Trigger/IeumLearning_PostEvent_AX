@@ -11,9 +11,10 @@ import sqlite3
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.app.personal_mail import router as personal_mail_router
 from backend.db.conn import connect, read_env
 
-DEFAULT_CORS_ORIGINS = ["http://localhost:3000"]
+DEFAULT_CORS_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
 ADOPTION_LABEL = {"Y": "예", "REVIEW": "검토 중", "N": "아니오"}  # 설문 Q6 (화면 설문 선택지)
 YES_NO_LABEL = {"Y": "예", "N": "아니오"}                         # 설문 Q7
 
@@ -26,6 +27,7 @@ def cors_origins():
 
 app = FastAPI(title="이음러닝 데이터 관리 API", description="데이터 관리 화면용 조회 API (GET만, 인증 없음 · 로컬 개발·시연용)")
 app.add_middleware(CORSMiddleware, allow_origins=cors_origins(), allow_methods=["GET"], allow_headers=["*"])
+app.include_router(personal_mail_router)  # 개인 맞춤 메일 화면 (backend/app/personal_mail.py)
 
 
 def query(sql):
