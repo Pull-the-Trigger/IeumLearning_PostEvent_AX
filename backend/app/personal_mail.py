@@ -108,6 +108,13 @@ def build_personal_mail():
             person["preQuestion"] = m["pre_question"]
         if memo:
             person["interactionMemo"] = memo
+        # 이 행사 '이전'의 후속 연락 기록(04)만 근거로 보여 준다. 행사 뒤 기록은 메일 쓸 시점엔 없던 정보라 뺀다.
+        # 행사장에서 말로 나눈 요청(현장 기록)은 이번 데이터에 없음 (REQ-A20 '다음').
+        history = [i for i in p.get("interactions", []) if (i.get("contact_date") or "9999") < ev.get("event_date", "")]
+        if history:
+            person["requests"] = [{"id": i.get("interaction_id") or f"{email}-{n}", "source": "contact",
+                                   "text": f"{i.get('memo') or '내용 없음'} → {i.get('result') or '결과 미기록'} ({i.get('method') or '방법 미기록'})",
+                                   "recordedAt": i.get("contact_date")} for n, i in enumerate(history)]
         answers = _survey_answers(survey)
         if answers:
             person["surveyAnswers"] = answers
