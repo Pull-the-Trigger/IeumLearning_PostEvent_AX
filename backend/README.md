@@ -33,7 +33,7 @@ python backend/db/load.py                           # build_profile.py 다음에
                                                     # out/thanks_mails.csv 가 있으면 감사 메일 초안도 넣음 (없으면 안내만, 2번 뒤 다시 실행)
 ```
 
-### API 서버 (데이터 관리·개인 맞춤 메일·개인 맞춤 콘텐츠 화면용): `backend/app/` ← `data/processed/ieum.db`, `out/custom_mails.csv`
+### API 서버 (데이터 관리·감사 메일 승인·개인 맞춤 메일·개인 맞춤 콘텐츠 화면용): `backend/app/` ← `data/processed/ieum.db`, `out/custom_mails.csv`
 
 > **현재 로그인·접근 제한 없음. 로컬 개발·시연용이며 서버 배포 전 인증 필요.**
 
@@ -42,7 +42,7 @@ python backend/db/load.py              # DB가 없거나 CSV가 바뀌었으면 
 python backend/custom_mail/build_mails.py --include-drafts  # /personal-mail 용 맞춤 메일 초안 (out/custom_mails.csv)
 uvicorn backend.app.main:app --reload  # http://127.0.0.1:8000 (문서 페이지: /docs)
 ```
-읽기(GET) 주소만 있고, 응답 필드는 화면 타입과 같은 camelCase입니다.
+조회는 GET, 감사 메일 승인·취소만 POST입니다. 응답 필드는 화면 타입과 같은 camelCase입니다.
 
 | 주소 | 내용 |
 |---|---|
@@ -53,8 +53,18 @@ uvicorn backend.app.main:app --reload  # http://127.0.0.1:8000 (문서 페이지
 | `/surveys` | 설문 응답 (행사명, 고객 연결 상태 포함) |
 | `/interactions` | 후속 연락 기록 (행사명 포함) |
 | `/contents` | 발행 글 |
+| `GET /thanks` | 감사 메일 행사별 요약: `eventId`, `eventName`, `eventDate`, `draftCount`, `excludedCount`, `status`, `sendBy`, `sendByPassed`, `scheduledAt`(있으면), `sentAt`(있으면) |
+| `GET /thanks/{event_id}` | 위 요약 + `recipients`: `draftId`, `email`, `name`, `company`, `title`, `subject`, `body`, `sender`, `surveyIncluded`, `approvalStatus`(`none`/`scheduled`/`sent`/`excluded`), `approvalInvalid` |
+| `POST /thanks/{event_id}/approve` | 본문 `{mode: "now" \| "scheduled", scheduledAt?: "YYYY-MM-DD HH:MM", excludedEmails?: []}`. 과거 예약 400, 발송 기한 이후 예약은 저장 + `warnings`, 이미 발송 409, 발송 예정이면 덮어씀 |
+| `POST /thanks/{event_id}/cancel` | 발송 예정(예약 시각 전)일 때만 그 행사 승인 기록 삭제. 발송 완료 409 |
 | `/personal-mail` | 개인 맞춤 메일 화면: 행사별 받는 사람(맞춤 메일 대상만), AI 초안, 갈래·약속·승인 방식. DB가 아니라 `out/custom_mails.csv`를 읽음 (`backend/app/personal_mail.py`) |
 | `/personal-content` | 개인 맞춤 콘텐츠 화면: 발행 글마다 추천 고객. R01 질문·R04 교류·R02 관심 주제·R06 불참 신청자 후기는 마케팅 발송, R03 도입 검토는 영업 담당 전달, R05 직무는 글 고를 때만. 수신 동의자만, 맞춤 메일에서 보낸 글 제외, 2주에 1편은 화면에서 보낼 때 막음 (`backend/app/personal_content.py`) |
+
+감사 메일 상태 규칙 (`backend/app/mail_approvals.py`, 행사 단위, 화면 값과 같음):
+- `draft` 초안 없음 / `review` 초안은 있고 유효한 승인 없음 / `scheduled` 예약 시각 전 / `sent` 지금 발송했거나 예약 시각이 지남
+- 승인 당시 `body_hash`(제목+본문)가 지금 초안과 다르면 승인 무효(`approvalInvalid`) → 발송 전이면 행사는 `review`. 이미 발송된 행사는 `sent` 유지
+- 시간은 Asia/Seoul, 저장 형식 `YYYY-MM-DD HH:MM:SS`. **실제 메일은 보내지 않고 상태만 기록합니다.**
+- 먼저 `build_thanks.py` → `load.py`로 초안을 DB에 넣어야 합니다 (메일 표가 없으면 503).
 
 `/customers` 필드 참고:
 - `interests`: 그 고객의 설문 Q5(듣고 싶은 주제)를 중복 없이 최근 응답 순으로 `", "` 연결 (설문이 없거나 Q5가 비면 `""`)

@@ -109,6 +109,24 @@
 - 글쓰기 기준 경고는 0건입니다.
 - 실제로는 E01·E02·E04·E06의 감사 메일이 행사 3~5일 뒤에 나갔고, E03·E05는 보내지 못했습니다(events.csv). 이 스크립트로 만들면 모든 행사의 감사 메일을 다음 날 12:00 발송 기한으로 준비할 수 있습니다.
 
+## 승인·예약·발송 (실제 발송 없음)
+
+초안을 DB에 넣은 뒤(`build_thanks.py` → `load.py`, 초안은 `mail_drafts`의 `mail_type='thanks'`) 본부장이 API로 행사 단위 승인을 합니다. **실제 메일은 보내지 않고 승인 상태만 `mail_approvals`에 기록합니다.** 주소는 [backend/README.md](../backend/README.md)의 API 표를 봐 주세요.
+
+1. `GET /thanks`로 행사별 상태를 보고, `GET /thanks/{event_id}`로 받는 사람별 제목·본문을 확인합니다.
+2. `POST /thanks/{event_id}/approve`로 승인합니다.
+   - `mode: "now"`: 지금 발송으로 기록 (`sent`, 발송 시각 = 지금)
+   - `mode: "scheduled"` + `scheduledAt: "YYYY-MM-DD HH:MM"`: 예약 (`scheduled`)
+   - `excludedEmails`: 이번에 보내지 않을 사람. `excluded`로 기록
+   - 예약 시각이 지금보다 과거면 거절(400), 발송 기한(`send_by`)보다 늦으면 저장하고 `warnings`로 알려 줍니다.
+   - 발송 예정 상태에서 다시 승인하면 새 승인으로 덮어씁니다(예약 시각·제외 대상 변경). 이미 발송된 행사는 다시 승인할 수 없습니다(409).
+   - 승인할 때 초안마다 그 시점의 `body_hash`(제목+본문)를 같이 저장합니다.
+3. `POST /thanks/{event_id}/cancel`: 예약 시각이 아직 안 왔을 때만 그 행사 승인 기록을 지워 검토 상태로 되돌립니다. 발송된 메일은 취소할 수 없습니다(409).
+
+행사 상태: `draft`(초안 없음) → `review`(승인 전) → `scheduled`(예약 시각 전) → `sent`(지금 발송했거나 예약 시각이 지남). 시간은 한국 시간(Asia/Seoul) 기준입니다.
+
+**승인 무효**: 승인 뒤에 초안을 다시 만들어(`build_thanks.py` → `load.py`) 제목이나 본문이 바뀐 사람이 있으면 그 사람의 `approvalInvalid`가 `true`가 되고, 발송 전이면 행사는 `review`로 돌아가 다시 승인해야 합니다. 이미 발송된 행사는 되돌릴 수 없으므로 `sent`로 남고 받는 사람별 `approvalInvalid`로만 표시됩니다.
+
 ## 실행
 
 실행 명령과 옵션은 [backend/README.md](../backend/README.md)를 봐 주세요. `data/processed/`가 먼저 있어야 합니다(`build_profile.py`).
