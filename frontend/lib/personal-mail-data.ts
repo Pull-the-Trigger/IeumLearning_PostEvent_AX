@@ -38,7 +38,17 @@ export type PersonalMailDraft = {
   sentAt?: string;
   history: PersonalMailHistory[];
   followUps: { reply: boolean; material: boolean; sales: boolean };
+  analysis?: PersonalMailAnalysis;
 };
+// 백엔드(/personal-mail)가 만든 맞춤 메일 근거. 화면은 판단하지 않고 그대로 보여 준다 (요구사항 U04).
+export type PersonalMailAnalysis = {
+  branch: "SALES" | "ARTICLE" | "STAFF" | "CUSTOM_TOPIC" | "THANKS_ONLY"; branchLabel: string; approval: string; sendBy: string;
+  promiseDue?: string | null; assignedStaff?: string | null; contactMode?: string | null; article?: string | null; articleReason?: string | null;
+  answer?: string | null; surveyTopic?: string | null; industry?: string | null; sentenceSource?: string; lint?: string | null; note?: string | null;
+};
+export type PersonalMailApiResponse = { events: ThankYouEvent[]; drafts: Record<string, PersonalMailDraft>; goals: Record<string, PersonalMailGoal> };
+export const PERSONAL_MAIL_API_STORAGE_KEY = "ieum-learning-personal-mail-api-v1";
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 export type PersonalMailGoal = { businessDays: number; targetDate: string };
 export type PersonalMailState = { drafts: Record<string, PersonalMailDraft>; goals: Record<string, PersonalMailGoal> };
