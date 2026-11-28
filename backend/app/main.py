@@ -14,11 +14,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.app.personal_content import router as personal_content_router
 from backend.app.personal_mail import router as personal_mail_router
 from backend.app.thanks import router as thanks_router
-from backend.db.conn import connect, read_env
+from backend.db.conn import connect, demo_today, read_env, today
 
 DEFAULT_CORS_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
 ADOPTION_LABEL = {"Y": "예", "REVIEW": "검토 중", "N": "아니오"}  # 설문 Q6 (화면 설문 선택지)
 YES_NO_LABEL = {"Y": "예", "N": "아니오"}                         # 설문 Q7
+
+today()  # DEMO_TODAY 형식이 틀리면 서버 시작 때 바로 오류
 
 
 def cors_origins():
@@ -59,7 +61,7 @@ def drop_none(d):
 @app.get("/health")
 def health():
     query("SELECT COUNT(*) FROM events")
-    return {"status": "ok", "db": "ok"}
+    return {"status": "ok", "db": "ok", "today": today().isoformat(), "demo": demo_today() is not None}
 
 
 @app.get("/events")

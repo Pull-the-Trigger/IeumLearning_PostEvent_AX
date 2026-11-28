@@ -2,14 +2,20 @@
 
 DB 파일 위치는 환경변수 → 루트 .env 의 DB_PATH 순서로 찾고, 없으면 data/processed/ieum.db.
 상대 경로는 저장소 루트 기준입니다. 연결할 때마다 외래 키를 켭니다.
+
+기준일: today()/now() 는 DEMO_TODAY(YYYY-MM-DD, 시연용)가 있으면 그 날짜, 없으면 실제 오늘 (Asia/Seoul).
+다른 코드에서: from backend.db.conn import today, now
 """
 import os
 import sqlite3
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[2]
 ENV_PATH = ROOT / ".env"
 DEFAULT_DB_PATH = ROOT / "data" / "processed" / "ieum.db"
+TZ = ZoneInfo("Asia/Seoul")
 
 
 def read_env(name):
@@ -26,6 +32,32 @@ def read_env(name):
         if k.strip() == name:
             return v.strip().strip('"').strip("'") or None
     return None
+
+
+def demo_today():
+    """DEMO_TODAY 날짜 (date). 없거나 비면 None, 형식이 틀리면 ValueError."""
+    value = read_env("DEMO_TODAY")
+    if not value:
+        return None
+    try:
+        if len(value) != 10:
+            raise ValueError
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError:
+        raise ValueError(
+            f"DEMO_TODAY 형식이 틀렸습니다: {value!r}. "
+            "YYYY-MM-DD 로 적거나 비워 두세요 (예: DEMO_TODAY=2026-07-09)."
+        ) from None
+
+
+def today():
+    """기준일 (date). DEMO_TODAY 가 있으면 그 날짜, 없으면 실제 오늘 (Asia/Seoul)."""
+    return demo_today() or datetime.now(TZ).date()
+
+
+def now():
+    """기준 시각 (Asia/Seoul, tz 포함). 날짜는 today(), 시·분·초는 실제 현재 시각."""
+    return datetime.combine(today(), datetime.now(TZ).timetz())
 
 
 def db_path():
