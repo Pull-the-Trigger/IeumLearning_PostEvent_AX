@@ -42,7 +42,7 @@ python backend/db/load.py              # DB가 없거나 CSV가 바뀌었으면 
 python backend/custom_mail/build_mails.py --include-drafts  # /personal-mail 용 맞춤 메일 초안 (out/custom_mails.csv)
 uvicorn backend.app.main:app --reload  # http://127.0.0.1:8000 (문서 페이지: /docs)
 ```
-조회는 GET, 감사 메일 승인·취소만 POST입니다. 응답 필드는 화면 타입과 같은 camelCase입니다.
+조회는 GET, 감사 메일 승인·취소·문안 저장만 POST입니다. 응답 필드는 화면 타입과 같은 camelCase입니다.
 
 | 주소 | 내용 |
 |---|---|
@@ -57,6 +57,9 @@ uvicorn backend.app.main:app --reload  # http://127.0.0.1:8000 (문서 페이지
 | `GET /thanks/{event_id}` | 위 요약 + `recipients`: `draftId`, `email`, `name`, `company`, `title`, `subject`, `body`, `sender`, `surveyIncluded`, `approvalStatus`(`none`/`scheduled`/`sent`/`excluded`), `approvalInvalid` |
 | `POST /thanks/{event_id}/approve` | 본문 `{mode: "now" \| "scheduled", scheduledAt?: "YYYY-MM-DD HH:MM", excludedEmails?: []}`. 과거 예약 400, 발송 기한 이후 예약은 저장 + `warnings`, 이미 발송 409, 발송 예정이면 덮어씀 |
 | `POST /thanks/{event_id}/cancel` | 발송 예정(예약 시각 전)일 때만 그 행사 승인 기록 삭제. 발송 완료 409 |
+| `GET /thanks/{event_id}/template` | 그 행사 감사 메일 문안·링크: `customized`(저장된 값이면 true, 아니면 template.txt + config.json 기본값), `subjectTemplate`, `bodyTemplate`(서명 앞까지), `surveyAskBlock`, `slidesUrl`, `surveyUrl`, `updatedAt`(있으면), `placeholders`(칸별 쓸 수 있는 자리 표시), `fixed`(`surveyThanksBlock`, `signature`, 수정 불가) |
+| `POST /thanks/{event_id}/template` | 본문 `{subjectTemplate, bodyTemplate, surveyAskBlock, slidesUrl, surveyUrl}`. `thanks_settings`에 저장 → 그 행사 초안 전체 다시 만들기(`body_hash` 재계산 → 기존 승인 자동 무효). 응답 = 위 내용 + `status`, `invalidatedCount`, `warnings`(글쓰기 기준). 모르는 자리 표시·빈 칸·http/https 아닌 링크 400, 발송 완료 409 |
+| `POST /thanks/{event_id}/template/reset` | 저장된 문안 삭제 → 기본 문안으로 다시 만들기. 응답 형식 같음. 발송 완료 409 |
 | `/personal-mail` | 개인 맞춤 메일 화면: 행사별 받는 사람(맞춤 메일 대상만), AI 초안, 갈래·약속·승인 방식. DB가 아니라 `out/custom_mails.csv`를 읽음 (`backend/app/personal_mail.py`) |
 | `/personal-content` | 개인 맞춤 콘텐츠 화면: 발행 글마다 추천 고객. R01 질문·R04 교류·R02 관심 주제·R06 불참 신청자 후기는 마케팅 발송, R03 도입 검토는 영업 담당 전달, R05 직무는 글 고를 때만. 수신 동의자만, 맞춤 메일에서 보낸 글 제외, 2주에 1편은 화면에서 보낼 때 막음 (`backend/app/personal_content.py`) |
 
@@ -65,6 +68,7 @@ uvicorn backend.app.main:app --reload  # http://127.0.0.1:8000 (문서 페이지
 - 승인 당시 `body_hash`(제목+본문)가 지금 초안과 다르면 승인 무효(`approvalInvalid`) → 발송 전이면 행사는 `review`. 이미 발송된 행사는 `sent` 유지
 - 시간은 Asia/Seoul, 저장 형식 `YYYY-MM-DD HH:MM:SS`. **실제 메일은 보내지 않고 상태만 기록합니다.**
 - 먼저 `build_thanks.py` → `load.py`로 초안을 DB에 넣어야 합니다 (메일 표가 없으면 503).
+- 문안 수정: 행사별 문안·링크는 `thanks_settings`(행사당 1행)에 저장합니다. 자리 표시·검사 규칙은 [docs/thank-you-mail.md](../docs/thank-you-mail.md)의 "화면에서 문안·링크 고치기"
 
 `/customers` 필드 참고:
 - `interests`: 그 고객의 설문 Q5(듣고 싶은 주제)를 중복 없이 최근 응답 순으로 `", "` 연결 (설문이 없거나 Q5가 비면 `""`)
@@ -82,7 +86,7 @@ python backend/db/load.py                    # 감사 메일 초안을 DB(mail_d
 ```
 옵션: `--config`, `--template`, `--signature`, `--out` (다른 설정·문안으로 시험할 때)
 
-`load.py`는 `mail_drafts`의 thanks 행만 지우고 다시 넣고, 승인 기록(`mail_approvals`)은 지우지 않습니다. 다른 위치의 CSV는 `--thanks-csv`로 지정합니다.
+`load.py`는 `mail_drafts`의 thanks 행만 지우고 다시 넣고, 승인 기록(`mail_approvals`)과 화면에서 고친 문안(`thanks_settings`)은 지우지 않습니다. `thanks_settings`에 행이 있는 행사는 CSV 대신 그 문안·링크로 초안을 다시 만들어 넣습니다. 다른 위치의 CSV는 `--thanks-csv`로 지정합니다.
 
 ### 3. 출석자별 후속 연락 계획: `backend/pre_question/` → `out/followup_plan.csv`
 ```bash

@@ -10,6 +10,10 @@
 - 대상: 각 행사의 참석자(attended=Y) 전원, 수신 동의와 상관없이. 제외 행사(E07 등)는 뺀다.
 - 한 사람이 여러 행사에 참석했으면 행사마다 한 통.
 - 같은 행사 설문에 이메일을 적고 행사 당일 응답한 사람(현장 QR)은 설문 요청 대신 응답 감사 문단을 넣는다.
+
+화면에서 고친 행사별 문안·링크(DB thanks_settings)도 같은 함수로 만든다 (backend/app/thanks.py, backend/db/load.py):
+  default_settings() 기본값 / validate_settings() 검사 / render_with_settings() 한 통 만들기
+  현장 응답자 감사 문단과 서명은 고정 (fixed_parts()).
 """
 import argparse
 import csv
@@ -23,6 +27,9 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 PROCESSED = ROOT / "data" / "processed"
 OUT = ROOT / "out" / "thanks_mails.csv"
+CONFIG_PATH = HERE / "config.json"
+TEMPLATE_PATH = HERE / "template.txt"
+SIGNATURE_PATH = HERE / "signature.txt"
 
 COLUMNS = ["event_id", "event_name", "email", "name", "company", "title", "consent",
            "mail_type", "survey_included", "sender", "send_by", "status", "subject", "body"]
@@ -39,6 +46,17 @@ EMOJI = re.compile("[\U0001F300-\U0001FAFF☀-➿]")
 MULTI_BANG = re.compile(r"[!！][^!！]*[!！]")   # 한 통에 느낌표 2개 이상
 LEFTOVER = re.compile(r"\{[^{}]*\}")
 
+# 화면에서 문안을 고칠 때 칸별로 쓸 수 있는 자리 표시 (template.txt 와 같은 모양)
+PLACEHOLDERS = {
+    "subject_template": ["{이름}", "{직함}", "{행사명}", "{M월 D일}"],
+    "body_template": ["{이름}", "{직함}", "{행사명}", "{M월 D일}", "{발표 자료 링크}", SURVEY_SLOT],
+    # {설문 링크}는 설문 요청 문단에서만 (현장 응답자 메일에는 설문 링크가 들어가지 않게)
+    "survey_ask_block": ["{이름}", "{직함}", "{행사명}", "{M월 D일}", "{발표 자료 링크}", "{설문 링크}"],
+}
+FIELD_LABELS = {"subject_template": "제목", "body_template": "본문", "survey_ask_block": "설문 요청 문단",
+                "slides_url": "발표 자료 링크", "survey_url": "설문 링크"}
+SETTING_FIELDS = list(FIELD_LABELS)
+
 
 def norm_email(s):
     return (s or "").strip().lower()
@@ -49,36 +67,94 @@ def read_csv(path):
         return list(csv.DictReader(f))
 
 
-def load_template(path, signature_path):
-    """template.txt → (제목, 본문, {설문 문단 종류: 문단}). 서명은 signature.txt에서 넣는다."""
+def load_template(path=TEMPLATE_PATH, signature_path=SIGNATURE_PATH):
+    """template.txt → {subject, body, ask, thanks, signature}.
+
+    body 는 {서명} 자리 앞까지 (서명은 render 가 끝에 붙임). 형식이 틀리면 ValueError.
+    """
     text = Path(path).read_text(encoding="utf-8").strip("\n")
     first, _, rest = text.partition("\n")
     if not first.startswith("제목:"):
-        sys.exit(f"[오류] {path} 첫 줄은 '제목: ...' 이어야 합니다.")
+        raise ValueError(f"[오류] {path} 첫 줄은 '제목: ...' 이어야 합니다.")
     blocks = {m.group(1): m.group(2).strip("\n") for m in BLOCK.finditer(rest)}
     for name in (BLOCK_ASK, BLOCK_THANKS):
         if name not in blocks:
-            sys.exit(f"[오류] {path}에 {{{name}}} ... {{{name} 끝}} 문단이 없습니다.")
-    body = BLOCK.sub("", rest)
+            raise ValueError(f"[오류] {path}에 {{{name}}} ... {{{name} 끝}} 문단이 없습니다.")
+    body, slot, after = BLOCK.sub("", rest).partition(SIGNATURE_SLOT)
+    if not slot or after.strip():
+        raise ValueError(f"[오류] {path} 본문은 {SIGNATURE_SLOT} 로 끝나야 합니다 (서명 뒤에는 설문 문단 두 개만).")
     signature = Path(signature_path).read_text(encoding="utf-8").strip("\n")
-    body = body.replace(SIGNATURE_SLOT, signature).strip("\n")
-    return first[len("제목:"):].strip(), body, blocks
+    return {"subject": first[len("제목:"):].strip(), "body": body.strip("\n"),
+            "ask": blocks[BLOCK_ASK], "thanks": blocks[BLOCK_THANKS], "signature": signature}
 
 
-def render(subject_t, body_t, blocks, *, name, title, event_name, event_date, slides, survey, include_survey):
+def render(subject_t, body_t, blocks, *, name, title, event_name, event_date, slides, survey, include_survey,
+           signature):
+    """한 통 만들기. body_t 는 서명 앞까지, blocks 는 {설문 요청, 설문 응답 감사} 문단."""
     d = date.fromisoformat(event_date)
-    greeting = f"{name} {title}님" if (title or "").strip() else "담당자님"
-    body = body_t.replace(GREETING, greeting)
+    has_title = bool((title or "").strip())
+    greeting = f"{name} {title}님" if has_title else "담당자님"
+    body = body_t.strip("\n") + "\n\n" + signature
+    body = body.replace(GREETING, greeting)
     body = body.replace(SURVEY_SLOT, blocks[BLOCK_ASK if include_survey else BLOCK_THANKS])
 
     values = {"{행사명}": event_name, "{M월 D일}": f"{d.month}월 {d.day}일",
-              "{발표 자료 링크}": slides, "{설문 링크}": survey}
+              "{발표 자료 링크}": slides, "{설문 링크}": survey,
+              "{이름}": name or "", "{직함}": title.strip() if has_title else ""}
     subject = subject_t
     for k, v in values.items():
         body = body.replace(k, v)
         subject = subject.replace(k, v)
     body = re.sub(r"\n{3,}", "\n\n", body).strip() + "\n"
     return subject, body
+
+
+def read_config(path=CONFIG_PATH):
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def fixed_parts():
+    """화면에서 고칠 수 없는 부분: (현장 응답자 감사 문단, 서명)."""
+    t = load_template()
+    return t["thanks"], t["signature"]
+
+
+def default_settings(event_id):
+    """template.txt + config.json 기본 문안·링크 (thanks_settings 한 줄과 같은 모양)."""
+    t = load_template()
+    links = read_config().get("links", {}).get(event_id, {})
+    return {"subject_template": t["subject"], "body_template": t["body"], "survey_ask_block": t["ask"],
+            "slides_url": links.get("slides", ""), "survey_url": links.get("survey", "")}
+
+
+def validate_settings(s):
+    """화면에서 보낸 문안·링크 검사. 문제 문구 목록 (비면 통과)."""
+    errors = []
+    for field in SETTING_FIELDS:
+        if not (s.get(field) or "").strip():
+            errors.append(f"{FIELD_LABELS[field]} 칸이 비어 있습니다.")
+    for field, allowed in PLACEHOLDERS.items():
+        unknown = sorted({m for m in LEFTOVER.findall(s.get(field) or "") if m not in allowed})
+        if unknown:
+            errors.append(f"{FIELD_LABELS[field]}에 쓸 수 없는 자리 표시: {', '.join(unknown)} "
+                          f"(쓸 수 있는 것: {' '.join(allowed)})")
+    n = (s.get("body_template") or "").count(SURVEY_SLOT)
+    if n != 1:
+        errors.append(f"본문에 {SURVEY_SLOT} 자리가 한 번 있어야 합니다 (지금 {n}번).")
+    for field in ("slides_url", "survey_url"):
+        url = (s.get(field) or "").strip()
+        if url and not re.fullmatch(r"https?://[^\s@]+", url):
+            errors.append(f"{FIELD_LABELS[field]}는 http:// 또는 https:// 로 시작하고 공백·'@'가 없어야 합니다: {url}")
+    return errors
+
+
+def render_with_settings(s, *, name, title, event_name, event_date, include_survey):
+    """thanks_settings 한 줄(또는 default_settings)로 한 통 만들기. 현장 응답 감사 문단·서명은 고정."""
+    thanks, signature = fixed_parts()
+    blocks = {BLOCK_ASK: s["survey_ask_block"].strip("\n"), BLOCK_THANKS: thanks}
+    return render(s["subject_template"].strip(), s["body_template"], blocks, name=name, title=title,
+                  event_name=event_name, event_date=event_date, slides=s["slides_url"].strip(),
+                  survey=s["survey_url"].strip(), include_survey=include_survey, signature=signature)
 
 
 def lint(text):
@@ -94,9 +170,9 @@ def lint(text):
 
 def main():
     ap = argparse.ArgumentParser(description="감사 메일 초안 만들기")
-    ap.add_argument("--config", default=HERE / "config.json")
-    ap.add_argument("--template", default=HERE / "template.txt")
-    ap.add_argument("--signature", default=HERE / "signature.txt")
+    ap.add_argument("--config", default=CONFIG_PATH)
+    ap.add_argument("--template", default=TEMPLATE_PATH)
+    ap.add_argument("--signature", default=SIGNATURE_PATH)
     ap.add_argument("--out", default=OUT)
     args = ap.parse_args()
 
@@ -116,7 +192,11 @@ def main():
             if "@" in url:
                 sys.exit(f"[오류] {eid} {k} 링크에 '@'가 있습니다. 링크에 이메일 등 개인정보를 넣지 마세요: {url}")
 
-    subject_t, body_t, blocks = load_template(args.template, args.signature)
+    try:
+        t = load_template(args.template, args.signature)
+    except ValueError as e:
+        sys.exit(str(e))
+    subject_t, body_t, blocks = t["subject"], t["body"], {BLOCK_ASK: t["ask"], BLOCK_THANKS: t["thanks"]}
 
     events = {r["event_id"]: r for r in read_csv(PROCESSED / "events.csv")}
     profiles = json.loads((PROCESSED / "profiles.json").read_text(encoding="utf-8"))
@@ -146,7 +226,7 @@ def main():
         subject, body = render(subject_t, body_t, blocks, name=p["name"], title=p.get("title"),
                                event_name=ev["event_name"], event_date=ev["event_date"],
                                slides=links[eid]["slides"], survey=links[eid]["survey"],
-                               include_survey=include)
+                               include_survey=include, signature=t["signature"])
         send_by = f"{(date.fromisoformat(ev['event_date']) + timedelta(days=days_after)).isoformat()} {by_time}"
         rows.append({"event_id": eid, "event_name": ev["event_name"], "email": email,
                      "name": p["name"], "company": p.get("company") or "", "title": p.get("title") or "",

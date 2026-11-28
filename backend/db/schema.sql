@@ -4,6 +4,7 @@
 -- - 여러 번 실행해도 됩니다 (CREATE ... IF NOT EXISTS).
 -- - 외래 키는 SQLite 연결마다 켜야 합니다:  PRAGMA foreign_keys = ON;
 -- - 데이터 넣는 순서: events → companies → customers → participation → surveys → interactions, contents → mail_drafts
+-- - load.py 가 비우지 않는 표: mail_approvals, thanks_settings
 -- - 날짜는 TEXT 'YYYY-MM-DD', Y/N 값은 TEXT 'Y' / 'N' (빈 값은 NULL)
 
 -- 행사 (00_행사목록)
@@ -130,6 +131,19 @@ CREATE TABLE IF NOT EXISTS mail_approvals (
     approved_at  TEXT,
     scheduled_at TEXT,
     sent_at      TEXT
+);
+
+-- 감사 메일 행사별 문안·링크 (화면에서 고친 값, 행사당 1행, 저장할 때마다 덮어씀). 없으면 template.txt + config.json 기본값
+-- 외래 키를 걸지 않음: load.py 가 events 를 비웠다 다시 넣어도 남아야 함. load.py 는 이 표를 절대 비우지 않음
+-- load.py 는 이 표에 줄이 있는 행사의 감사 메일 초안을 이 문안으로 다시 만들어 넣음
+CREATE TABLE IF NOT EXISTS thanks_settings (
+    event_id         TEXT PRIMARY KEY,
+    subject_template TEXT NOT NULL,                                         -- 자리 표시: {이름} {직함} {행사명} {M월 D일}
+    body_template    TEXT NOT NULL,                                         -- 서명 앞까지. + {발표 자료 링크} {설문 문단}
+    survey_ask_block TEXT NOT NULL,                                         -- {설문 문단} 자리에 들어갈 설문 요청 문단. + {설문 링크}
+    slides_url       TEXT NOT NULL,
+    survey_url       TEXT NOT NULL,
+    updated_at       TEXT NOT NULL                                          -- 'YYYY-MM-DD HH:MM:SS'
 );
 
 -- 조회용 인덱스

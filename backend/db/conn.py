@@ -6,6 +6,7 @@ DB 파일 위치는 환경변수 → 루트 .env 의 DB_PATH 순서로 찾고, �
 기준일: today()/now() 는 DEMO_TODAY(YYYY-MM-DD, 시연용)가 있으면 그 날짜, 없으면 실제 오늘 (Asia/Seoul).
 다른 코드에서: from backend.db.conn import today, now
 """
+import hashlib
 import os
 import sqlite3
 from datetime import datetime
@@ -66,6 +67,11 @@ def db_path():
         return DEFAULT_DB_PATH
     p = Path(value).expanduser()
     return p if p.is_absolute() else ROOT / p
+
+
+def body_hash(subject, body):
+    """메일 초안 승인 확인용 값 sha256(subject + "\n" + body). 제목만 바뀌어도 달라짐 → 다시 승인."""
+    return hashlib.sha256(f"{subject or ''}\n{body or ''}".encode("utf-8")).hexdigest()
 
 
 def connect(path=None):
