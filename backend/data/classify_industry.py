@@ -66,6 +66,19 @@ def _warn(msg):
     print(f"  [경고] {msg}")
 
 
+# 실제 회사 적용 시 운영 흐름은 docs/data-schema.md 참고 ("실제 회사 적용 시" 섹션)
+#
+# 지금 프롬프트는 가상 회사(회사명·도메인만 있음)용입니다. 실제 회사에는 근거 글을 함께 주는 아래 초안을 씁니다.
+# (입력 항목: company_key, company_name, domain, evidence = 홈페이지 소개 글 또는 웹검색 결과 요약, source_url)
+#
+#   너는 한국 회사를 한국표준산업분류(KSIC) 제11차 중분류로 분류한다.
+#   각 회사의 evidence(홈페이지 회사 소개 글 또는 웹검색 결과)를 근거로, 아래 목록에서 주된 사업에 해당하는 중분류 코드 하나만 고른다.
+#   - evidence 에 주된 사업(무엇을 만들거나 파는지, 어떤 서비스를 하는지)이 직접 드러날 때만 고른다.
+#   - evidence 가 비었거나, 다른 회사 이야기이거나, 사업 내용이 드러나지 않으면 추측하지 말고 mid 를 빈 문자열 "" 로 둔다.
+#   - 회사명·도메인만 보고 추측하지 않는다 (회사명은 evidence 가 그 회사 이야기인지 확인하는 데만 쓴다).
+#   - reason 에 판단 근거가 된 evidence 속 문장을 한 줄로 옮겨 적는다 (빈칸이면 부족한 이유).
+#   - 입력의 company_key 를 그대로 돌려준다.
+#   (스키마에는 reason 필드를 추가: {"company_key", "mid", "reason"})
 def _prompt(ksic):
     codes = "\n".join(f"{c} {m['name']}" for c, m in ksic["mid"].items())
     return (

@@ -5,10 +5,17 @@
 
 ## 설치
 
+가상환경(`.venv`, git에는 올라가지 않음)을 만들고 그 안에 설치합니다.
+
 ```bash
-pip install -r backend/requirements.txt
-pip install openai          # LLM(OpenAI)을 쓸 때만
+python -m venv .venv                              # 처음 한 번
+source .venv/bin/activate                         # 새 터미널을 열 때마다
+python -m pip install -r backend/requirements.txt
+which python                                      # .../.venv/bin/python 이 나와야 함
 ```
+
+- 새 터미널마다 `source .venv/bin/activate`를 다시 실행해야 합니다.
+- 주의: `~/.zshrc`에 `alias python=...`가 있으면 가상환경을 켜도 다른 python이 실행됩니다. `which python`으로 `.venv` 경로인지 확인하세요.
 
 LLM 설정은 루트 `.env`에 `OPENAI_API_KEY`, `OPENAI_MODEL`을 적습니다. 키가 없으면 LLM 없이 실행됩니다.
 
