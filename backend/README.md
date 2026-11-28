@@ -46,7 +46,7 @@ uvicorn backend.app.main:app --reload  # http://127.0.0.1:8000 (문서 페이지
 | `/interactions` | 후속 연락 기록 (행사명 포함) |
 | `/contents` | 발행 글 |
 | `/personal-mail` | 개인 맞춤 메일 화면: 행사별 받는 사람(맞춤 메일 대상만), AI 초안, 갈래·약속·승인 방식. DB가 아니라 `out/custom_mails.csv`를 읽음 (`backend/app/personal_mail.py`) |
-| `/personal-content` | 개인 맞춤 콘텐츠 화면: 발행 글마다 추천 고객. R01 질문·R04 교류·R02 관심 주제·R06 불참 신청자 후기는 마케팅 발송, R03 도입 검토는 영업 담당 전달, R05 직무는 글 고를 때만. 수신 동의자만, 맞춤 메일에서 보낸 글 제외, 1인 1편 (`backend/app/personal_content.py`) |
+| `/personal-content` | 개인 맞춤 콘텐츠 화면: 발행 글마다 추천 고객. R01 질문·R04 교류·R02 관심 주제·R06 불참 신청자 후기는 마케팅 발송, R03 도입 검토는 영업 담당 전달, R05 직무는 글 고를 때만. 수신 동의자만, 맞춤 메일에서 보낸 글 제외, 2주에 1편은 화면에서 보낼 때 막음 (`backend/app/personal_content.py`) |
 
 `/customers` 필드 참고:
 - `interests`: 그 고객의 설문 Q5(듣고 싶은 주제)를 중복 없이 최근 응답 순으로 `", "` 연결 (설문이 없거나 Q5가 비면 `""`)

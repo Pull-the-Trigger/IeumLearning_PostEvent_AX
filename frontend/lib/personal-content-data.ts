@@ -5,7 +5,7 @@ export type RecommendationType = "R01" | "R02" | "R03" | "R04" | "R05" | "R06";
 export type ContentMailStatus = "draft" | "review" | "scheduled" | "sent";
 export type RoleClassification = "경영진" | "HR" | "교육" | "DX·AX" | "IT" | "개발" | "현업" | "기타(미확인)";
 export type EvidenceSection = { label: string; value: string };
-export type Recommendation = { id: string; publicationId: string; customer: CustomerProfile; type: RecommendationType; supportingEvidence: string[]; evidenceSource: string[]; evidenceSections: EvidenceSection[]; reason: string; roleClassification: RoleClassification; relatedEvent?: { name: string; eventDate: string }; excludedReason?: string };
+export type Recommendation = { id: string; publicationId: string; customer: CustomerProfile; type: RecommendationType; supportingEvidence: string[]; evidenceSource: string[]; evidenceSections: EvidenceSection[]; reason: string; roleClassification: RoleClassification; relatedEvent?: { name: string; eventDate: string }; excludedReason?: string; primary?: boolean; otherPublicationTitles?: string[] };
 export type ContentMailDraft = { recommendationId: string; sender: string; subject: string; body: string; status: ContentMailStatus; reviewed: boolean; excluded?: boolean; scheduledAt?: string; sentAt?: string };
 
 export const recommendationTypes: { code: RecommendationType; label: string; description: string }[] = [

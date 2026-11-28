@@ -12,8 +12,8 @@
   R05 직무 연계형  직함으로 본 직무 = 글의 대상 독자. 이것만으로는 보내지 않고(B05 '짐작 금지'),
                    한 사람이 여러 글에 걸릴 때 어느 글을 줄지 고르는 데만 쓴다
   R06 행사 연계형  행사에 신청했지만 오지 않은 사람에게, 행사 '이후' 발행된 그 행사 후기 글
-공통: 수신 동의자만 (B01) / 맞춤 메일에서 이미 보낸 글은 빼기 / 한 사람에게 1편만 (B04 '2주마다 1편')
-     → 1편 고르는 순서: 유형(R01 > R04 > R02 > R06) → 글 대상 독자가 직무와 맞는 글 → 최근 발행 글
+공통: 수신 동의자만 (B01) / 맞춤 메일에서 이미 보낸 글은 빼기 / 2주에 1편(B04)은 화면에서 보낼 때 막음
+     → 여러 글에 걸린 사람은 이번 회차 1편을 추천 표시: 유형(R01 > R04 > R02 > R06) → 대상 독자가 직무와 맞는 글 → 최근 발행 글
 """
 import csv
 import json
@@ -168,23 +168,28 @@ def build_personal_content():
                 row["excludedReason"] = "직무만으로는 보내지 않음 (질문·설문·교류·불참 기록 없음)"
             candidates.append((row, a, x["role"]))
 
-    # 한 사람에게 1편만: 유형 → 대상 독자가 직무와 맞는 글 → 최근 발행 순으로 고르고, 나머지는 제외 목록에 남긴다
+    # 2주에 1편(B04)은 '보낼 때' 막는다 (화면의 중복 발송 검사). 추천 단계에서는 관련 있는 사람을 모두 보여 주고,
+    # 한 사람이 여러 글에 걸리면 이번 회차에 보낼 1편을 추천(primary)으로 표시한다:
+    # 유형(R01 > R04 > R02 > R06) → 글 대상 독자가 직무와 맞는 글 → 최근 발행 글
     rank = {"R01": 0, "R04": 1, "R02": 2, "R06": 3}
-    best = {}
+    eligible = {}
     for row, a, role in candidates:
-        if "excludedReason" in row:
-            continue
-        key = (rank[row["type"]], AUDIENCE_ROLE.get(a["audience"]) != role, "".join(chr(0x10FFFF - ord(ch)) for ch in a["published_date"]), a["content_id"])
-        cid = row["customer"]["id"]
-        if cid not in best or key < best[cid][0]:
-            best[cid] = (key, row["id"], a)
+        if "excludedReason" not in row:
+            key = (rank[row["type"]], AUDIENCE_ROLE.get(a["audience"]) != role, "".join(chr(0x10FFFF - ord(ch)) for ch in a["published_date"]), a["content_id"])
+            eligible.setdefault(row["customer"]["id"], []).append((key, row, a))
+    for items in eligible.values():
+        items.sort(key=lambda t: t[0])
+        best_row, best_art = items[0][1], items[0][2]
+        for _, row, a in items:
+            row["primary"] = row is best_row
+            row["otherPublicationTitles"] = [b["title"] for _, r, b in items if r is not row]
+            if row["type"] != "R06" and AUDIENCE_ROLE.get(a["audience"]) == row["roleClassification"]:
+                row["reason"] += f" 글 대상 독자({a['audience']})가 직무와도 맞습니다."
+            if len(items) > 1:
+                row["reason"] += (" 다른 글 %d편에도 추천됨 — 2주에 1편만 보내므로 이 글을 이번 회차로 추천합니다." % (len(items) - 1)) if row is best_row \
+                    else f" 다른 글 {len(items) - 1}편에도 추천됨 — 이번 회차 추천은 「{best_art['title']}」입니다."
     recommendations = {a["content_id"]: [] for a in contents}
     for row, a, role in candidates:
-        cid = row["customer"]["id"]
-        if "excludedReason" not in row and best[cid][1] != row["id"]:
-            row["excludedReason"] = f"이번 회차는 다른 글로 추천: 「{best[cid][2]['title']}」 (1인 1편)"
-        elif "excludedReason" not in row and row["type"] != "R06" and AUDIENCE_ROLE.get(a["audience"]) == role:
-            row["reason"] += f" 같은 주제 글 중 대상 독자({a['audience']})가 직무와 맞는 글을 골랐습니다."
         recommendations[a["content_id"]].append(row)
     return {"publications": publications, "recommendations": recommendations}
 
