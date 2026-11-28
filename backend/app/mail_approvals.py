@@ -11,22 +11,22 @@
              이미 보낸 메일은 되돌릴 수 없으므로 그 뒤 초안이 바뀌어도 sent 유지 (받는 사람별 approvalInvalid 로만 표시)
 
 시간은 Asia/Seoul 기준 'YYYY-MM-DD HH:MM:SS' 문자열 (문자열 비교 = 시각 비교).
+현재 시각은 backend.db.conn.now() (DEMO_TODAY 가 있으면 날짜만 그 날로 바뀜).
 """
 import re
 import sqlite3
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 
+from backend.db import conn
 from backend.db.conn import connect
 
-TZ = ZoneInfo("Asia/Seoul")
 SCHEDULE_FORMAT = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}")
 
 
 def now_str():
-    return datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
+    return conn.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def norm_email(s):

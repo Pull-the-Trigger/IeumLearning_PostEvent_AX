@@ -72,6 +72,8 @@ uvicorn backend.app.main:app --reload  # http://127.0.0.1:8000 (문서 페이지
 - `role` 필드는 없음 (직무 분류는 화면에서 계산)
 
 설정은 루트 `.env`의 `DB_PATH`(DB 위치), `CORS_ORIGINS`(허용할 화면 주소, 기본 `http://localhost:3000`, `http://127.0.0.1:3000`)입니다. `.env.example` 참고.
+- `DEMO_TODAY`: 시연용 기준일(`YYYY-MM-DD`, 예: `2026-07-09`). 비우면 실제 오늘(Asia/Seoul). 날짜만 바뀌고 시·분·초는 실제 현재 시각이며, 마감 지남·예약 시각 검사에 쓰입니다. 형식이 틀리면 서버가 시작되지 않습니다. `/health`의 `today`·`demo`로 확인.
+- 다른 코드에서 기준일·현재 시각 쓰기: `from backend.db.conn import today, now`
 
 ### 2. 감사 메일: `backend/thanks_mail/` → `out/thanks_mails.csv`
 ```bash
