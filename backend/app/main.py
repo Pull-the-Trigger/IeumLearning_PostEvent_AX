@@ -1,4 +1,4 @@
-"""데이터 관리 화면용 조회 API (GET만).
+"""데이터 관리 화면용 API (조회는 GET, 감사 메일 승인·취소는 POST).
 
 실행 (저장소 루트에서, load.py 로 DB를 만든 뒤):
     uvicorn backend.app.main:app --reload
@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.personal_content import router as personal_content_router
 from backend.app.personal_mail import router as personal_mail_router
+from backend.app.thanks import router as thanks_router
 from backend.db.conn import connect, read_env
 
 DEFAULT_CORS_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
@@ -26,10 +27,11 @@ def cors_origins():
     return origins or DEFAULT_CORS_ORIGINS
 
 
-app = FastAPI(title="이음러닝 데이터 관리 API", description="데이터 관리 화면용 조회 API (GET만, 인증 없음 · 로컬 개발·시연용)")
-app.add_middleware(CORSMiddleware, allow_origins=cors_origins(), allow_methods=["GET"], allow_headers=["*"])
+app = FastAPI(title="이음러닝 데이터 관리 API", description="데이터 관리 화면용 API (조회 GET, 감사 메일 승인 POST · 인증 없음 · 로컬 개발·시연용)")
+app.add_middleware(CORSMiddleware, allow_origins=cors_origins(), allow_methods=["GET", "POST"], allow_headers=["*"])
 app.include_router(personal_mail_router)  # 개인 맞춤 메일 화면 (backend/app/personal_mail.py)
 app.include_router(personal_content_router)  # 개인 맞춤 콘텐츠 화면 (backend/app/personal_content.py)
+app.include_router(thanks_router)  # 감사 메일 승인 (backend/app/thanks.py)
 
 
 def query(sql):

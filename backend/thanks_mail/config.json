@@ -1,4 +1,5 @@
 {
+  "sender": "이음러닝 마케팅본부장 한서윤 <sy.han@ieumlearning.example>",
   "send_by_days_after": 1,
   "send_by_time": "12:00",
   "exclude_events": ["E07"],

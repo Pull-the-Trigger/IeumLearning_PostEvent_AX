@@ -3,7 +3,7 @@
 --
 -- - 여러 번 실행해도 됩니다 (CREATE ... IF NOT EXISTS).
 -- - 외래 키는 SQLite 연결마다 켜야 합니다:  PRAGMA foreign_keys = ON;
--- - 데이터 넣는 순서: events → companies → customers → participation → surveys → interactions, contents
+-- - 데이터 넣는 순서: events → companies → customers → participation → surveys → interactions, contents → mail_drafts
 -- - 날짜는 TEXT 'YYYY-MM-DD', Y/N 값은 TEXT 'Y' / 'N' (빈 값은 NULL)
 
 -- 행사 (00_행사목록)
@@ -100,6 +100,38 @@ CREATE TABLE IF NOT EXISTS contents (
     url            TEXT
 );
 
+-- 메일 초안 (감사·맞춤 메일·맞춤 콘텐츠 공통)
+-- draft_id = "{mail_type}:{event_id 또는 content_id}:{email}"  예: thanks:E01:user001@co07chem.example
+-- 같은 메일은 다시 만들어도 같은 ID. load.py 는 mail_type='thanks' 행만 지우고 다시 넣음
+CREATE TABLE IF NOT EXISTS mail_drafts (
+    draft_id   TEXT PRIMARY KEY,
+    mail_type  TEXT NOT NULL CHECK (mail_type IN ('thanks', 'custom', 'content')),
+    event_id   TEXT REFERENCES events (event_id),                           -- content 메일은 NULL 가능
+    email      TEXT NOT NULL,
+    name       TEXT,
+    company    TEXT,
+    title      TEXT,
+    sender     TEXT,
+    subject    TEXT,
+    body       TEXT,
+    send_by    TEXT,                                                        -- 'YYYY-MM-DD HH:MM'
+    body_hash  TEXT NOT NULL,                                               -- sha256(subject + "\n" + body)
+    extra      TEXT,                                                        -- JSON 문자열 (메일 종류별 정보)
+    created_at TEXT NOT NULL                                                -- 'YYYY-MM-DD HH:MM:SS'
+);
+
+-- 메일 승인 기록 (초안과 분리). draft_id 는 mail_drafts 와 같은 ID
+-- 외래 키를 걸지 않음: 초안을 다시 만들 때 지워져도 승인 기록은 남아야 함. load.py 는 이 표를 절대 비우지 않음
+-- body_hash(승인 당시)가 현재 초안의 body_hash 와 다르면 승인 무효
+CREATE TABLE IF NOT EXISTS mail_approvals (
+    draft_id     TEXT PRIMARY KEY,
+    status       TEXT NOT NULL CHECK (status IN ('scheduled', 'sent', 'excluded')),
+    body_hash    TEXT,
+    approved_at  TEXT,
+    scheduled_at TEXT,
+    sent_at      TEXT
+);
+
 -- 조회용 인덱스
 CREATE INDEX IF NOT EXISTS idx_customers_company_key ON customers (company_key);
 CREATE INDEX IF NOT EXISTS idx_participation_email   ON participation (email);
@@ -107,3 +139,4 @@ CREATE INDEX IF NOT EXISTS idx_surveys_event_id      ON surveys (event_id);
 CREATE INDEX IF NOT EXISTS idx_surveys_email         ON surveys (email);
 CREATE INDEX IF NOT EXISTS idx_interactions_event_id ON interactions (event_id);
 CREATE INDEX IF NOT EXISTS idx_interactions_email    ON interactions (email);
+CREATE INDEX IF NOT EXISTS idx_mail_drafts_type_event ON mail_drafts (mail_type, event_id);
