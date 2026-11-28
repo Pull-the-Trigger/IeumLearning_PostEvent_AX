@@ -10,33 +10,32 @@
 - mail_drafts 는 mail_type='thanks' 행만 지우고 다시 넣습니다 (custom·content 행은 그대로).
   out/thanks_mails.csv 가 없으면 안내만 하고 mail_drafts 는 건드리지 않습니다.
 - mail_approvals(승인 기록)는 어떤 경우에도 비우거나 다시 만들지 않습니다.
+- thanks_settings(화면에서 고친 감사 메일 문안·링크)도 어떤 경우에도 비우지 않습니다.
+  이 표에 줄이 있는 행사는 CSV 초안 대신 그 문안으로 다시 만들어 넣습니다 (줄 없는 행사는 CSV 그대로).
 """
 import argparse
 import csv
-import hashlib
 import json
 import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
 
-from conn import ROOT, connect, db_path
+from conn import ROOT, body_hash, connect, db_path
+
+sys.path.insert(0, str(ROOT))
+from backend.thanks_mail import build_thanks  # noqa: E402  (저장소 루트를 경로에 넣은 뒤 가져옴)
 
 SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
 # schema.sql 주석의 넣는 순서 (외래 키 때문에 참조되는 표가 먼저)
 TABLES = ["events", "companies", "customers", "participation", "surveys", "interactions", "contents"]
 # 메일 표(mail_drafts, mail_approvals)는 TABLES 에 넣지 않음 → 아래 "표 비우기"에서 지워지지 않음.
-# mail_approvals 는 이 파일 어디에서도 DELETE/DROP 하지 않음.
+# mail_approvals, thanks_settings 는 이 파일 어디에서도 DELETE/DROP 하지 않음.
 THANKS_CSV = ROOT / "out" / "thanks_mails.csv"
 THANKS_COLS = ["event_id", "email", "name", "company", "title", "consent", "survey_included",
                "sender", "send_by", "subject", "body"]
 DRAFT_COLS = ["draft_id", "mail_type", "event_id", "email", "name", "company", "title", "sender",
               "subject", "body", "send_by", "body_hash", "extra", "created_at"]
-
-
-def body_hash(subject, body):
-    """승인 후 제목·본문이 바뀌었는지 보는 값. 제목도 포함 (제목만 바뀌어도 다시 승인)."""
-    return hashlib.sha256(f"{subject or ''}\n{body or ''}".encode("utf-8")).hexdigest()
 
 
 def convert(value):
@@ -103,6 +102,7 @@ def read_thanks(path):
             raise ValueError(f"{path}: 같은 초안이 두 번 있습니다: {draft_id}")
         seen.add(draft_id)
         extra = {"survey_included": v["survey_included"], "consent": v["consent"]}
+        # 제목·본문은 CSV 원문 그대로 (thanks_settings 가 있는 행사는 load() 에서 다시 만듦)
         rows.append({"draft_id": draft_id, "mail_type": "thanks", "event_id": v["event_id"], "email": v["email"],
                      "name": v["name"], "company": v["company"], "title": v["title"], "sender": v["sender"],
                      "subject": r["subject"], "body": r["body"], "send_by": v["send_by"],
@@ -111,7 +111,31 @@ def read_thanks(path):
     return rows
 
 
+def rerender_customized(con, thanks, events_csv):
+    """thanks_settings 에 줄이 있는 행사의 초안을 그 문안·링크로 다시 만듦 (thanks 행을 바로 고침). 고친 행사 목록."""
+    settings = {r["event_id"]: dict(r) for r in con.execute("SELECT * FROM thanks_settings")}
+    if not settings:
+        return []
+    cols, rows = events_csv
+    events = {r["event_id"]: r for r in rows}
+    done = set()
+    for r in thanks:
+        s = settings.get(r["event_id"])
+        ev = events.get(r["event_id"])
+        if s is None or ev is None:
+            continue
+        include = json.loads(r["extra"]).get("survey_included") == "Y"
+        r["subject"], r["body"] = build_thanks.render_with_settings(
+            s, name=r["name"], title=r["title"], event_name=ev["event_name"], event_date=ev["event_date"],
+            include_survey=include)
+        r["body_hash"] = body_hash(r["subject"], r["body"])
+        done.add(r["event_id"])
+    return sorted(done)
+
+
 def load(con, data, thanks):
+    """돌려주는 값: thanks_settings 문안으로 다시 만든 행사 목록."""
+    rerendered = []
     con.executescript("BEGIN;\n" + SCHEMA_PATH.read_text(encoding="utf-8"))
     # events 를 비웠다 다시 넣는 동안 mail_drafts(custom 등)의 event_id 외래 키가 막지 않도록 COMMIT 때 검사
     con.execute("PRAGMA defer_foreign_keys = ON")
@@ -129,6 +153,7 @@ def load(con, data, thanks):
         except sqlite3.Error as e:
             raise sqlite3.Error(f"{t} 넣기 실패: {e}") from e
     if thanks is not None:
+        rerendered = rerender_customized(con, thanks, data["events"])
         con.execute("DELETE FROM mail_drafts WHERE mail_type = 'thanks'")
         sql = f"INSERT INTO mail_drafts ({', '.join(DRAFT_COLS)}) VALUES ({', '.join('?' * len(DRAFT_COLS))})"
         try:
@@ -139,6 +164,7 @@ def load(con, data, thanks):
         con.execute("COMMIT")
     except sqlite3.IntegrityError as e:
         raise sqlite3.Error(f"외래 키 검사 실패 (mail_drafts 의 event_id 가 events 에 없을 수 있음): {e}") from e
+    return rerendered
 
 
 def main():
@@ -167,7 +193,7 @@ def main():
     con = connect(path)
     con.isolation_level = None  # 트랜잭션을 직접 관리
     try:
-        load(con, data, thanks)
+        rerendered = load(con, data, thanks)
     except Exception as e:
         if con.in_transaction:
             con.execute("ROLLBACK")
@@ -182,6 +208,10 @@ def main():
     for mt, n in con.execute("SELECT mail_type, COUNT(*) FROM mail_drafts GROUP BY mail_type ORDER BY mail_type"):
         print(f"  mail_drafts {mt:<8}{n:>5}")
     print(f"  mail_approvals{con.execute('SELECT COUNT(*) FROM mail_approvals').fetchone()[0]:>5}  (비우지 않음)")
+    custom = [r[0] for r in con.execute("SELECT event_id FROM thanks_settings ORDER BY event_id")]
+    print(f"  thanks_settings{len(custom):>4}  (비우지 않음)")
+    if rerendered:
+        print(f"  고친 문안으로 다시 만든 감사 메일 행사: {', '.join(rerendered)}")
     con.close()
     try:
         shown = path.relative_to(ROOT)

@@ -3,13 +3,13 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { AlertTriangle, CalendarCheck, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Clock3, ExternalLink, History, Lock, Search, Send, Settings2, UserPlus, Users, X } from "lucide-react";
+import { AlertTriangle, CalendarCheck, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Clock3, ExternalLink, History, RotateCcw, Save, Search, Send, Settings2, UserPlus, Users, X } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { StatusText } from "@/components/status-text";
 import { getStatusLabel, getStatusTone, type RecipientFilter } from "@/lib/thank-you-mail-data";
 import { surveyDefinitions } from "@/lib/survey-data";
 import { getSurveyRows, type SurveyRow } from "@/lib/data-management-data";
-import { approveThanks, cancelThanks, getHealth, getThanksDetail, getThanksList, nextDay, type ThanksApprovalStatus, type ThanksDetail, type ThanksRecipient, type ThanksSummary } from "@/lib/thanks-api";
+import { approveThanks, cancelThanks, getHealth, getThanksDetail, getThanksList, getThanksTemplate, nextDay, resetThanksTemplate, saveThanksTemplate, templateInput, type ThanksApprovalStatus, type ThanksDetail, type ThanksRecipient, type ThanksSummary, type ThanksTemplate, type ThanksTemplateField, type ThanksTemplateInput, type ThanksTemplateSaveResult } from "@/lib/thanks-api";
 import { SurveyManagementModal } from "@/components/survey-management-modal";
 
 const LOAD_ERROR_MESSAGE = "데이터를 불러오지 못했습니다. 백엔드 서버가 켜져 있는지 확인해 주세요.";
@@ -17,14 +17,14 @@ const DEFAULT_SCHEDULE_TIME = "09:00";
 
 type Load<T> = { status: "loading" } | { status: "error" } | { status: "ready"; data: T };
 type Schedule = { date: string; time: string };
-type Notice = { eventId: string; tone: "complete" | "warning" | "danger"; lines: string[] };
+type Notice = { eventId: string; area: "approval" | "template"; tone: "complete" | "warning" | "danger"; lines: string[] };
 
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : String(error); }
 function serverExcluded(detail: ThanksDetail) { return new Set(detail.recipients.filter((person) => person.approvalStatus === "excluded").map((person) => person.email)); }
 function sameSet(a: Set<string>, b: Set<string>) { return a.size === b.size && [...a].every((value) => b.has(value)); }
 function shortTime(value?: string) { return value ? value.slice(0, 16) : ""; }
-function bodyLinks(recipients: ThanksRecipient[]) { return [...new Set(recipients.flatMap((person) => person.body.match(/https?:\/\/[^\s<]+/gi) ?? []))]; }
-function linkLabel(url: string) { return /\/slides?\//i.test(url) ? "발표 자료" : /\/survey\//i.test(url) ? "만족도 설문" : "링크"; }
+function isHttpUrl(value: string) { return /^https?:\/\/[^\s@]+$/i.test(value.trim()); }
+function sameInput(a: ThanksTemplateInput, b: ThanksTemplateInput) { return (Object.keys(a) as ThanksTemplateField[]).every((key) => a[key] === b[key]); }
 function surveyDefinitionFor(eventId: string) { return surveyDefinitions.find((item) => item.token.startsWith(`${eventId.toLowerCase()}-`)); }
 
 export function ThankYouMailPage() {
@@ -41,7 +41,10 @@ export function ThankYouMailPage() {
   const [confirmation, setConfirmation] = useState<"immediate" | "scheduled" | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [templates, setTemplates] = useState<Record<string, Load<ThanksTemplate>>>({});
+  const [templateDrafts, setTemplateDrafts] = useState<Record<string, ThanksTemplateInput>>({});
   const requested = useRef(new Set<string>());
+  const requestedTemplates = useRef(new Set<string>());
   const browserOrigin = useSyncExternalStore(() => () => undefined, () => window.location.origin, () => "");
 
   useEffect(() => {
@@ -64,10 +67,25 @@ export function ThankYouMailPage() {
     });
   }
 
+  function applyTemplate(eventId: string, template: ThanksTemplate, syncDraft: boolean) {
+    setTemplates((current) => ({ ...current, [eventId]: { status: "ready", data: template } }));
+    setTemplateDrafts((current) => (syncDraft || !current[eventId] ? { ...current, [eventId]: templateInput(template) } : current));
+  }
+
   useEffect(() => {
-    if (!selectedId || requested.current.has(selectedId)) return;
-    requested.current.add(selectedId);
-    void loadDetail(selectedId, false);
+    if (!selectedId) return;
+    if (!requested.current.has(selectedId)) {
+      requested.current.add(selectedId);
+      void loadDetail(selectedId, false);
+    }
+    if (!requestedTemplates.current.has(selectedId)) {
+      const eventId = selectedId;
+      requestedTemplates.current.add(eventId);
+      getThanksTemplate(eventId).then((template) => applyTemplate(eventId, template, false)).catch(() => {
+        requestedTemplates.current.delete(eventId);
+        setTemplates((current) => ({ ...current, [eventId]: { status: "error" } }));
+      });
+    }
   }, [selectedId]);
 
   if (list.status !== "ready") {
@@ -96,17 +114,53 @@ export function ThankYouMailPage() {
   const eventSurveys = surveyRows?.filter((row) => row.eventId === event.eventId) ?? null;
   const surveyDefinition = surveyDefinitionFor(event.eventId);
   const surveyUrl = surveyDefinition ? `${browserOrigin}/survey/${surveyDefinition.token}` : "";
-  const links = bodyLinks(recipients);
+  const templateLoad = templates[event.eventId] ?? { status: "loading" as const };
+  const template = templateLoad.status === "ready" ? templateLoad.data : null;
+  const templateDraft = templateDrafts[event.eventId] ?? (template ? templateInput(template) : null);
+  const templateDirty = !!template && !!templateDraft && !sameInput(templateDraft, templateInput(template));
+  const templateLocked = isSent || busy;
   const statusCounts = { draft: 0, review: 0, scheduled: 0, sent: 0 };
   events.forEach((item) => { statusCounts[item.status] += 1; });
-  const eventNotice = notice?.eventId === event.eventId ? notice : null;
+  const approvalNotice = notice?.eventId === event.eventId && notice.area === "approval" ? notice : null;
+  const templateNotice = notice?.eventId === event.eventId && notice.area === "template" ? notice : null;
   const canApprove = !!detail && !isSent && !busy && finalCount > 0;
 
   function selectEvent(eventId: string) { setSelectedId(eventId); setNotice(null); }
+  function editTemplate(field: ThanksTemplateField, value: string) {
+    if (!templateDraft) return;
+    setTemplateDrafts((current) => ({ ...current, [event.eventId]: { ...templateDraft, [field]: value } }));
+  }
+
+  async function changeTemplate(kind: "save" | "reset") {
+    if (busy || !templateDraft) return;
+    if (kind === "reset" && !window.confirm("저장한 문안·링크를 지우고 기본 문안으로 되돌릴까요? 이 행사 초안 전체가 다시 만들어집니다.")) return;
+    if (kind === "save") {
+      const missing = [["{이름}", "이름"], ["{발표 자료 링크}", "발표 자료 링크"]].filter(([token]) => !templateDraft.bodyTemplate.includes(token)).map(([, label]) => label);
+      if (missing.length && !window.confirm(`${missing.length === 2 ? "이름과 발표 자료 링크가" : missing[0] === "이름" ? "이름이" : "발표 자료 링크가"} 메일에 들어가지 않아요. 그대로 저장할까요?`)) return;
+    }
+    const eventId = event.eventId;
+    const before = event.status;
+    setBusy(true);
+    try {
+      const result: ThanksTemplateSaveResult = kind === "save" ? await saveThanksTemplate(eventId, templateDraft) : await resetThanksTemplate(eventId);
+      applyTemplate(eventId, result, true);
+      const lines = [kind === "save" ? `문안·링크를 저장하고 초안 ${event.draftCount}통을 다시 만들었어요.` : "기본 문안으로 되돌리고 초안을 다시 만들었어요."];
+      const invalidated = before === "scheduled" || result.invalidatedCount > 0;
+      if (invalidated) lines.push("승인이 무효가 되어 다시 승인이 필요해요.");
+      lines.push(...result.warnings.map((warning) => `글쓰기 기준: ${warning}`));
+      setNotice({ eventId, area: "template", tone: invalidated || result.warnings.length ? "warning" : "complete", lines });
+    } catch (error) {
+      setNotice({ eventId, area: "template", tone: "danger", lines: [errorMessage(error).replaceAll("자리 표시", "자동 입력 항목")] });
+    } finally {
+      await loadDetail(eventId, false);
+      setBusy(false);
+    }
+  }
+
   function setSchedule(patch: Partial<Schedule>) { setScheduleByEvent((current) => ({ ...current, [event.eventId]: { ...schedule, ...patch } })); }
 
   function requestConfirmation(type: "immediate" | "scheduled") {
-    if (type === "scheduled" && (!schedule.date || !schedule.time)) { setNotice({ eventId: event.eventId, tone: "danger", lines: ["발송 예정일과 시간을 설정해 주세요."] }); return; }
+    if (type === "scheduled" && (!schedule.date || !schedule.time)) { setNotice({ eventId: event.eventId, area: "approval", tone: "danger", lines: ["발송 예정일과 시간을 설정해 주세요."] }); return; }
     setConfirmation(type);
   }
 
@@ -117,10 +171,10 @@ export function ThankYouMailPage() {
     try {
       const result = await approveThanks(eventId, { mode, scheduledAt: mode === "scheduled" ? `${schedule.date} ${schedule.time}` : undefined, excludedEmails: [...excluded] });
       const done = mode === "now" ? `발송 처리했어요 · ${shortTime(result.sentAt)} · ${result.draftCount - result.excludedCount}명 (실제 메일은 보내지 않고 상태만 기록)` : `예약 발송을 승인했어요 · ${shortTime(result.scheduledAt)} · ${result.draftCount - result.excludedCount}명`;
-      setNotice({ eventId, tone: result.warnings.length ? "warning" : "complete", lines: [done, ...result.warnings] });
+      setNotice({ eventId, area: "approval", tone: result.warnings.length ? "warning" : "complete", lines: [done, ...result.warnings] });
       await loadDetail(eventId, true);
     } catch (error) {
-      setNotice({ eventId, tone: "danger", lines: [errorMessage(error)] });
+      setNotice({ eventId, area: "approval", tone: "danger", lines: [errorMessage(error)] });
       await loadDetail(eventId, false);
     } finally {
       setBusy(false);
@@ -134,16 +188,16 @@ export function ThankYouMailPage() {
     setBusy(true);
     try {
       await cancelThanks(eventId);
-      setNotice({ eventId, tone: "complete", lines: ["예약 발송 승인을 취소했어요."] });
+      setNotice({ eventId, area: "approval", tone: "complete", lines: ["예약 발송 승인을 취소했어요."] });
     } catch (error) {
-      setNotice({ eventId, tone: "danger", lines: [errorMessage(error)] });
+      setNotice({ eventId, area: "approval", tone: "danger", lines: [errorMessage(error)] });
     } finally {
       await loadDetail(eventId, false);
       setBusy(false);
     }
   }
 
-  return <div className="mail-page">
+  return <div className="mail-page thank-you-page">
     <PageHeader />
 
     <section className="mail-section"><div className="mail-section-heading"><div><h2>업무 현황 요약</h2><p>행사별 감사 메일 상태를 기준으로 집계합니다.</p></div></div><div className="status-summary-grid"><SummaryCard label="작성 대기" count={statusCounts.draft} tone="warning" /><SummaryCard label="검토 대기" count={statusCounts.review} tone="pending" /><SummaryCard label="발송 예정" count={statusCounts.scheduled} tone="pending" /><SummaryCard label="발송 완료" count={statusCounts.sent} tone="complete" /></div></section>
@@ -157,11 +211,11 @@ export function ThankYouMailPage() {
 
       <section className="mail-card"><CardTitle index="03" title="만족도 조사 연동 현황" action={<button className="secondary-button" type="button" onClick={() => setSurveyManagementOpen(true)}><ClipboardList size={14} /> 만족도 조사 관리</button>} /><div className="survey-metrics"><Metric label="전체 설문 응답" value={eventSurveys ? `${eventSurveys.length}건` : "미확인"} /><Metric label="이메일 식별 응답" value={eventSurveys ? `${eventSurveys.filter((row) => row.identified).length}건` : "미확인"} /><Metric label="설문 요청 포함" value={`${surveyIncludedCount}명`} /><Metric label="설문 요청 미포함" value={`${finalCount - surveyIncludedCount}명`} accent /></div><div className="info-banner muted-banner"><AlertTriangle size={16} /><span>행사 당일 이메일을 적어 설문에 응답한 참석자는 설문 요청 문단이 빠진 초안으로 만들어집니다.</span></div></section>
 
-      <section className="mail-card"><CardTitle index="04" title="자료·설문 링크" action={<span className="template-badge"><Lock size={11} /> 보기 전용</span>} /><div className="option-list">{links.length ? links.map((url) => <div className="mail-option mail-option-stack" key={url}><div className="mail-option-content"><strong>{linkLabel(url)}</strong><div className="survey-link-row"><code>{url}</code><button className="secondary-button compact-button" type="button" onClick={() => window.open(url, "_blank", "noopener,noreferrer")}><ExternalLink size={13} /> 링크 확인</button></div></div></div>) : <EmptyState message="메일 본문에 들어간 링크가 없습니다." />}</div><p className="template-help">링크는 감사 메일 초안 본문에 들어간 값입니다. 화면에서는 수정할 수 없습니다.</p></section>
+      <section className="mail-card"><CardTitle index="04" title="자료·설문 링크" action={<span className="template-badge">{template?.customized ? "이 행사용으로 바꾼 값" : "기본값"}</span>} />{!template ? <EmptyState message={templateLoad.status === "error" ? LOAD_ERROR_MESSAGE : "데이터를 불러오는 중입니다."} /> : <div className="option-list">{LINK_FIELDS.map(({ field, label }) => <div className="mail-option mail-option-stack" key={field}><div className="mail-option-content"><strong>{label}</strong><div className="survey-link-row"><code title={template[field]}>{template[field] || "등록된 링크가 없습니다."}</code><button className="secondary-button compact-button" type="button" disabled={!isHttpUrl(template[field])} onClick={() => window.open(template[field].trim(), "_blank", "noopener,noreferrer")}><ExternalLink size={13} /> 링크 확인</button></div></div></div>)}</div>}<p className="template-help">링크는 05 감사 메일 문안의 문안 수정 탭에서 바꿀 수 있어요.{templateDraft && template && (templateDraft.slidesUrl !== template.slidesUrl || templateDraft.surveyUrl !== template.surveyUrl) ? " (저장하지 않은 변경 있음)" : ""}</p></section>
 
-      <section className="mail-card"><CardTitle index="05" title="감사 메일 문안" action={<span className="template-badge">초안 그대로 표시</span>} /><div className="mail-tabs"><button className={previewTab === "edit" ? "active" : ""} type="button" disabled title="문안 수정 기능 준비 중">문안 수정</button><button className={previewTab === "preview" ? "active" : ""} onClick={() => setPreviewTab("preview")} type="button">메일 미리보기</button></div><p className="template-help">문안 수정 기능 준비 중입니다.</p><MailPreview key={event.eventId} recipients={recipients} excluded={excluded} /></section>
+      <section className="mail-card"><CardTitle index="05" title="감사 메일 문안" action={<span className="template-badge">{template?.customized ? `이 행사용 문안${template.updatedAt ? ` · ${shortTime(template.updatedAt)} 저장` : ""}` : "기본 문안"}</span>} /><div className="mail-tabs"><button className={previewTab === "edit" ? "active" : ""} onClick={() => setPreviewTab("edit")} type="button">문안 수정{templateDirty ? " •" : ""}</button><button className={previewTab === "preview" ? "active" : ""} onClick={() => setPreviewTab("preview")} type="button">메일 미리보기</button></div>{previewTab === "edit" ? (!template || !templateDraft ? <EmptyState message={templateLoad.status === "error" ? LOAD_ERROR_MESSAGE : "데이터를 불러오는 중입니다."} /> : <><TemplateEditor template={template} draft={templateDraft} locked={templateLocked} exampleName={recipients[0]?.name || "임지우"} onChange={editTemplate} /><div className="approval-actions"><button className="primary-button" type="button" onClick={() => changeTemplate("save")} disabled={templateLocked || !templateDirty}><Save size={15} /> 저장</button><button className="text-button" type="button" onClick={() => changeTemplate("reset")} disabled={templateLocked || !template.customized}><RotateCcw size={14} /> 기본 문안으로 되돌리기</button>{templateDirty && <StatusText tone="warning">저장하지 않은 변경</StatusText>}</div></>) : <><p className="template-help">미리보기는 저장된 초안 기준입니다.{templateDirty ? " 저장하지 않은 변경은 아직 반영되지 않았습니다." : ""}</p><MailPreview key={event.eventId} recipients={recipients} excluded={excluded} /></>}{isSent && <p className="simulation-note">발송 완료된 행사는 문안·링크를 고칠 수 없습니다.</p>}{!isSent && event.status === "scheduled" && <p className="simulation-note">발송 예정 행사입니다. 문안을 저장하면 승인이 무효가 되어 다시 승인해야 합니다.</p>}{templateNotice && <NoticeBanner notice={templateNotice} />}</section>
 
-      <section className="mail-card"><CardTitle index="06" title="발송 일정 및 승인" /><div className="schedule-form-grid"><label>발송 예정일<DatePicker value={schedule.date} onChange={(date) => setSchedule({ date })} /></label><label>발송 예정 시간<TimePicker value={schedule.time} onChange={(time) => setSchedule({ time })} /></label><div className="timezone-note"><Clock3 size={15} /> Asia/Seoul 기준 · 기본값 기준일({today || "미확인"}) 다음 날 오전 9시</div></div><div className="approval-facts"><Fact label="최종 발송 대상" value={`${finalCount}명`} /><Fact label="검토 대상 문안" value={`받는 사람별 초안 ${recipients.length}건`} /><Fact label="설문 요청 포함 대상" value={`${surveyIncludedCount}명`} /><Fact label="발송 기한" value={event.sendBy ?? "—"} /></div><div className="approval-actions"><button className="primary-button" type="button" onClick={() => requestConfirmation("immediate")} disabled={!canApprove}><Send size={15} /> 지금 발송</button><button className="primary-button" type="button" onClick={() => requestConfirmation("scheduled")} disabled={!canApprove}><CalendarCheck size={15} /> 예약 발송 승인</button><button className="text-button" type="button" onClick={cancel} disabled={busy || event.status !== "scheduled"}>승인 취소</button></div>{today === "" && <p className="simulation-note">기준일(/health)을 불러오지 못해 발송 예정일 기본값을 정하지 못했습니다. 날짜를 직접 골라 주세요.</p>}{event.status === "scheduled" && event.scheduledAt && <p className="simulation-note">예약 발송 승인 완료 · {shortTime(event.scheduledAt)} · {event.draftCount - event.excludedCount}명 대상</p>}{isSent && <p className="simulation-note">발송 완료 · {shortTime(event.sentAt)} · 발송된 메일은 다시 승인하거나 취소할 수 없습니다.</p>}{eventNotice && <div className={`info-banner ${eventNotice.tone === "warning" ? "" : "muted-banner"}`}><StatusText tone={eventNotice.tone}>{eventNotice.tone === "danger" ? "오류" : eventNotice.tone === "warning" ? "확인 필요" : "완료"}</StatusText><span>{eventNotice.lines.map((line, index) => <span key={line}>{index > 0 && <br />}{line}</span>)}</span></div>}</section>
+      <section className="mail-card"><CardTitle index="06" title="발송 일정 및 승인" /><div className="schedule-form-grid"><label>발송 예정일<DatePicker value={schedule.date} onChange={(date) => setSchedule({ date })} /></label><label>발송 예정 시간<TimePicker value={schedule.time} onChange={(time) => setSchedule({ time })} /></label><div className="timezone-note"><Clock3 size={15} /> Asia/Seoul 기준 · 기본값 기준일({today || "미확인"}) 다음 날 오전 9시</div></div><div className="approval-facts"><Fact label="최종 발송 대상" value={`${finalCount}명`} /><Fact label="검토 대상 문안" value={`받는 사람별 초안 ${recipients.length}건`} /><Fact label="설문 요청 포함 대상" value={`${surveyIncludedCount}명`} /><Fact label="발송 기한" value={event.sendBy ?? "—"} /></div><div className="approval-actions"><button className="primary-button" type="button" onClick={() => requestConfirmation("immediate")} disabled={!canApprove}><Send size={15} /> 지금 발송</button><button className="primary-button" type="button" onClick={() => requestConfirmation("scheduled")} disabled={!canApprove}><CalendarCheck size={15} /> 예약 발송 승인</button><button className="text-button" type="button" onClick={cancel} disabled={busy || event.status !== "scheduled"}>승인 취소</button></div>{today === "" && <p className="simulation-note">기준일(/health)을 불러오지 못해 발송 예정일 기본값을 정하지 못했습니다. 날짜를 직접 골라 주세요.</p>}{event.status === "scheduled" && event.scheduledAt && <p className="simulation-note">예약 발송 승인 완료 · {shortTime(event.scheduledAt)} · {event.draftCount - event.excludedCount}명 대상</p>}{isSent && <p className="simulation-note">발송 완료 · {shortTime(event.sentAt)} · 발송된 메일은 다시 승인하거나 취소할 수 없습니다.</p>}{approvalNotice && <NoticeBanner notice={approvalNotice} />}</section>
 
       <section className="mail-card"><CardTitle index="07" title="발송 이력" /><div className="history-list">{isSent ? <div className="history-row"><span className="history-icon"><History size={16} /></span><div><strong>{shortTime(event.sentAt)}</strong><span>{event.draftCount - event.excludedCount}명 · 제외 {event.excludedCount}명</span></div><StatusText tone="complete">상태 기록</StatusText></div> : <EmptyState message="아직 발송된 감사 메일이 없습니다." />}</div></section>
     </>}
@@ -176,6 +230,55 @@ function summaryOf(detail: ThanksDetail): ThanksSummary {
   const { recipients, ...summary } = detail;
   void recipients;
   return summary;
+}
+
+function NoticeBanner({ notice }: { notice: Notice }) {
+  return <div className={`info-banner ${notice.tone === "warning" ? "" : "muted-banner"}`}><StatusText tone={notice.tone}>{notice.tone === "danger" ? "오류" : notice.tone === "warning" ? "확인 필요" : "완료"}</StatusText><span>{notice.lines.map((line, index) => <span key={line}>{index > 0 && <br />}{line}</span>)}</span></div>;
+}
+
+const LINK_FIELDS = [{ field: "slidesUrl", label: "발표 자료 링크" }, { field: "surveyUrl", label: "설문 링크" }] as const;
+type TextField = "subjectTemplate" | "bodyTemplate" | "surveyAskBlock";
+
+function TemplateBlock({ title, editable, note, children }: { title: string; editable: boolean; note?: string; children: React.ReactNode }) {
+  return <div className="template-block"><div className="template-block-heading"><strong>{title}</strong><span className={editable ? "template-tag-editable" : "template-tag-locked"}>{editable ? "수정 가능" : "수정 불가"}</span>{note && <small>{note}</small>}</div>{children}</div>;
+}
+
+function TemplateEditor({ template, draft, locked, exampleName, onChange }: { template: ThanksTemplate; draft: ThanksTemplateInput; locked: boolean; exampleName: string; onChange: (field: ThanksTemplateField, value: string) => void }) {
+  const inputs = useRef<Partial<Record<TextField, HTMLInputElement | HTMLTextAreaElement | null>>>({});
+
+  function insertToken(field: TextField, token: string) {
+    const element = inputs.current[field];
+    const value = draft[field];
+    const start = element?.selectionStart ?? value.length;
+    const end = element?.selectionEnd ?? start;
+    onChange(field, value.slice(0, start) + token + value.slice(end));
+    window.requestAnimationFrame(() => {
+      if (!element) return;
+      element.focus();
+      element.setSelectionRange(start + token.length, start + token.length);
+    });
+  }
+
+  function textField(field: TextField, rows?: number) {
+    const common = { value: draft[field], disabled: locked, ref: (element: HTMLInputElement | HTMLTextAreaElement | null) => { inputs.current[field] = element; } };
+    return <>
+      {rows ? <textarea {...common} rows={rows} onChange={(e) => onChange(field, e.target.value)} /> : <input {...common} onChange={(e) => onChange(field, e.target.value)} />}
+      <div className="template-tokens"><span>자동 입력 항목</span>{template.placeholders[field].map((token) => <button className="template-token" type="button" key={token} disabled={locked} onMouseDown={(e) => e.preventDefault()} onClick={() => insertToken(field, token)}>{token}</button>)}</div>
+    </>;
+  }
+
+  return <div className="template-editor template-structure">
+    <p className="template-help">{"{이름}"} 같은 자동 입력 항목은 받는 사람마다 바뀌어요. 예: {"{이름}"} → {exampleName}</p>
+    <TemplateBlock title="링크" editable>{LINK_FIELDS.map(({ field, label }) => <label key={field}>{label}<div className="mail-link-field"><input value={draft[field]} onChange={(e) => onChange(field, e.target.value)} disabled={locked} placeholder="https://" /><button className="secondary-button compact-button" type="button" disabled={!isHttpUrl(draft[field])} onClick={() => window.open(draft[field].trim(), "_blank", "noopener,noreferrer")}><ExternalLink size={13} /> 링크 확인</button></div>{draft[field] && !isHttpUrl(draft[field]) && <small>http:// 또는 https:// 로 시작하고 공백·&apos;@&apos;가 없는 주소를 입력해 주세요.</small>}</label>)}</TemplateBlock>
+    <TemplateBlock title="제목" editable>{textField("subjectTemplate")}</TemplateBlock>
+    <TemplateBlock title="본문" editable note={"{이름} {직함}님은 직함이 없으면 '담당자님'이 돼요."}>{textField("bodyTemplate", 14)}</TemplateBlock>
+    <div className="template-survey-group">
+      <p className="template-help">본문의 {"{설문 문단}"} 자리에 아래 둘 중 하나가 들어가요.</p>
+      <TemplateBlock title="설문 요청 문단" editable note="설문을 아직 안 한 사람에게 들어가요.">{textField("surveyAskBlock", 4)}</TemplateBlock>
+      <TemplateBlock title="현장 응답 감사 문단" editable={false} note="현장에서 설문한 사람에게 들어가요."><pre className="template-readonly">{template.fixed.surveyThanksBlock}</pre></TemplateBlock>
+    </div>
+    <TemplateBlock title="서명" editable={false} note="모든 메일 끝에 붙어요."><pre className="template-readonly">{template.fixed.signature}</pre></TemplateBlock>
+  </div>;
 }
 
 function PageHeader() {

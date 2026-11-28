@@ -975,3 +975,25 @@ section { margin-bottom: 34px; }
 .sales-report-paper ul { padding-left: 20px; }
 .sales-confirm-body label { display: grid; gap: 6px; margin-top: 14px; color: var(--muted); font-size: 11px; }
 .sales-confirm-body textarea { min-height: 76px; padding: 9px; color: var(--text); background: #151b24; border: 1px solid var(--border); border-radius: 5px; resize: vertical; font: inherit; }
+
+/* 감사 메일 화면 전용 (.thank-you-page 아래만): 시간 선택 글자 잘림, 비활성 버튼 표시, 문안 수정 */
+.thank-you-page .time-picker select { min-width: 0; padding: 9px 4px; }
+.thank-you-page .text-button:disabled, .thank-you-page .secondary-button:disabled, .thank-you-page .template-token:disabled { cursor: not-allowed; opacity: .45; }
+.thank-you-page .template-editor input:disabled, .thank-you-page .template-editor textarea:disabled { cursor: not-allowed; opacity: .6; }
+.thank-you-page .template-structure { gap: 16px; }
+.thank-you-page .template-block { display: grid; gap: 8px; min-width: 0; }
+.thank-you-page .template-block-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.thank-you-page .template-block-heading strong { color: var(--heading); font-size: 12px; }
+.thank-you-page .template-block-heading small { color: var(--muted); font-size: 11px; }
+.thank-you-page .template-tag-editable, .thank-you-page .template-tag-locked { padding: 2px 6px; border-radius: 4px; font-size: 10px; white-space: nowrap; }
+.thank-you-page .template-tag-editable { color: var(--accent); background: rgba(145,181,255,.09); }
+.thank-you-page .template-tag-locked { color: var(--muted); background: rgba(155,169,189,.1); }
+.thank-you-page .template-readonly { margin: 0; padding: 10px 11px; color: var(--muted); background: rgba(155,169,189,.06); border: 1px dashed var(--border); border-radius: 5px; font: inherit; font-size: 12px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.thank-you-page .template-survey-group { display: grid; gap: 14px; padding-left: 12px; border-left: 2px solid var(--border); }
+.thank-you-page .template-tokens { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.thank-you-page .template-tokens > span { color: var(--muted); font-size: 10px; }
+.thank-you-page .template-token { padding: 3px 7px; color: var(--accent); background: var(--active); border: 1px solid transparent; border-radius: 4px; cursor: pointer; font: inherit; font-size: 11px; }
+.thank-you-page .template-token:not(:disabled):hover { border-color: var(--accent); }
+@media (min-width: 901px) {
+  .thank-you-page .schedule-form-grid { grid-template-columns: minmax(160px, 220px) minmax(240px, 280px) 1fr; }
+}
