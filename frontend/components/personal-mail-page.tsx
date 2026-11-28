@@ -131,7 +131,7 @@ function DatePicker({ value, min, open, onOpenChange, onChange }: { value: strin
 
 function FieldRequestEvidence({ person }: { person: CustomerProfile }) {
   const requests = person.requests?.filter((item) => item.source === "field" || item.source === "contact") ?? [];
-  return <div className="evidence-block"><strong>현장 추가 질문 및 요청</strong>{requests.length ? requests.map((item) => <span className="evidence-record" key={item.id}>{item.text}<small>{item.source === "field" ? "출처: 담당자 현장 기록" : "출처: 후속 연락 기록"}{item.recordedAt ? ` · ${item.recordedAt}` : ""}</small></span>) : <span className="evidence-pending">데이터 연동 대기 · 현장 질문 및 요청 등록은 참가자 및 고객 정보에서 관리합니다.</span>}<small>{requests.length ? `등록된 질문 및 요청 ${requests.length}건` : "현장 기록 데이터가 현재 프론트엔드에 연결되지 않았습니다."}</small></div>;
+  return <div className="evidence-block"><strong>현장 추가 질문 및 요청</strong>{requests.length ? requests.map((item) => <span className="evidence-record" key={item.id}>{item.text}<small>{item.source === "field" ? "출처: 담당자 현장 기록" : "출처: 후속 연락 기록"}{item.recordedAt ? ` · ${item.recordedAt}` : ""}</small></span>) : person.id.includes("@") ? <span>기록 없음</span> : <span className="evidence-pending">데이터 연동 대기 · 현장 질문 및 요청 등록은 참가자 및 고객 정보에서 관리합니다.</span>}<small>{requests.length ? `등록된 질문 및 요청 ${requests.length}건` : person.id.includes("@") ? "이 행사 전 후속 연락 기록 없음 · 행사장 대화 기록은 이번 데이터에 없음" : "현장 기록 데이터가 현재 프론트엔드에 연결되지 않았습니다."}</small></div>;
 }
 
 function SurveyEvidence({ person }: { person: CustomerProfile }) {
@@ -158,7 +158,7 @@ function AnalysisEvidence({ analysis: a }: { analysis: PersonalMailAnalysis }) {
   return <div className="evidence-block"><strong>AI 초안 근거 · {a.branchLabel} ({a.branch})</strong>
     {a.promiseDue && <span>약속: {a.assignedStaff ?? "담당자"} · {a.promiseDue}까지 연락</span>}
     {a.contactMode && <span>연락 방식: {a.contactMode}</span>}
-    {a.answer && <span>답변 재료: {a.answer}</span>}
+    {a.answer && <span>답변 재료: {a.answer === "approved" ? "승인된 답변 사용" : a.answer === "draft" ? "검수 전 답변 포함 (본부장 승인 필요)" : a.answer}</span>}
     {a.article ? <span>추천 글: {a.article}</span> : a.articleReason && <span>추천 글 없음: {a.articleReason}</span>}
     {a.surveyTopic && <span>설문 관심 주제: {a.surveyTopic}</span>}
     {a.note && <span>메모: {a.note}</span>}
