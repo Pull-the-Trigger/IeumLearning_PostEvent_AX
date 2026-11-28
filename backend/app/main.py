@@ -11,6 +11,7 @@ import sqlite3
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.app.personal_content import router as personal_content_router
 from backend.app.personal_mail import router as personal_mail_router
 from backend.db.conn import connect, read_env
 
@@ -28,6 +29,7 @@ def cors_origins():
 app = FastAPI(title="이음러닝 데이터 관리 API", description="데이터 관리 화면용 조회 API (GET만, 인증 없음 · 로컬 개발·시연용)")
 app.add_middleware(CORSMiddleware, allow_origins=cors_origins(), allow_methods=["GET"], allow_headers=["*"])
 app.include_router(personal_mail_router)  # 개인 맞춤 메일 화면 (backend/app/personal_mail.py)
+app.include_router(personal_content_router)  # 개인 맞춤 콘텐츠 화면 (backend/app/personal_content.py)
 
 
 def query(sql):
