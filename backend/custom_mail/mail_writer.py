@@ -109,8 +109,12 @@ STAFF_WHY = {
 }
 
 
-def render_mail(row, art, prev_event, due, label, same_company_n, rep=None, survey_line="", answer="", trigger_line="", staff_why="no_basis", contact_mode="first", continued_from=""):
-    """3덩어리: ① 인사 ② 감사·질문 받기·답변 재료·이유 ③ 약속·선택 질문·글 / 서명."""
+def render_mail(row, art, prev_event, due, label, same_company_n, rep=None, survey_line="", answer="", trigger_line="", staff_why="no_basis", contact_mode="first", continued_from="", known_topic=""):
+    """3덩어리: ① 인사 ② 감사·질문 받기·답변 재료·이유 ③ 약속·선택 질문·글 / 서명.
+
+    known_topic: 설문 Q5 '듣고 싶은 주제'. 이미 알려준 내용은 다시 묻지 않는다 (11/28 팀 결정)
+    → 영업 메일의 '회신으로 한 줄만 남겨 주십시오' 대신 그 주제를 중심으로 준비한다고 쓴다.
+    같은 질문에는 같은 핵심 답변을 쓰고, 추가 맥락은 이 한 곳에만 반영한다 (문장마다 억지로 바꾸지 않음)."""
     title = row.get("title") or ""
     name = f"{row['name']} {title}님" if title else f"{row['name']} 담당자님"
     q, ev, br = row["pre_question"], row["event_name"], row["branch"]
@@ -150,6 +154,10 @@ def render_mail(row, art, prev_event, due, label, same_company_n, rep=None, surv
             # 질문도 남기고 설문에서 연락도 요청한 사람: 왜 담당자가 연락하는지 밝힌다 (미동의자도 본인이 요청해서 연락하는 것)
             why = "설문에서 담당자 연락도 요청해 주셔서, " if q and "담당자 연락을 요청" in trigger_line else ""
             end.append(f"{why}{who} {due.month}월 {due.day}일까지 연락드리겠습니다.")
+            if known_topic:
+                said = "설문에 함께 적어 주신" if (survey_line or "설문" in trigger_line) else "설문에 적어 주신"
+                end.append(f"{said} ‘{known_topic}’ 내용을 중심으로 준비하겠습니다.")
+                ask = ""  # 이미 알려준 관심사를 다시 묻지 않는다
             if ask:
                 end.append(ask.replace("회신으로 한 줄만 남겨 주십시오.", "회신으로 한 줄만 남겨 주십시오. 그 내용을 기준으로 준비해서 연락드리겠습니다."))
         if art:
