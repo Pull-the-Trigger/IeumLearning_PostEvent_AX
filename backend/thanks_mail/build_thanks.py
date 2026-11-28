@@ -25,7 +25,7 @@ PROCESSED = ROOT / "data" / "processed"
 OUT = ROOT / "out" / "thanks_mails.csv"
 
 COLUMNS = ["event_id", "event_name", "email", "name", "company", "title", "consent",
-           "mail_type", "survey_included", "send_by", "status", "subject", "body"]
+           "mail_type", "survey_included", "sender", "send_by", "status", "subject", "body"]
 
 SURVEY_SLOT = "{설문 문단}"
 SIGNATURE_SLOT = "{서명}"
@@ -106,6 +106,9 @@ def main():
     by_time = cfg.get("send_by_time", "12:00")
     if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", by_time):
         sys.exit(f"[오류] config.json send_by_time 형식은 HH:MM 입니다: {by_time!r}")
+    sender = (cfg.get("sender") or "").strip()
+    if not sender:
+        sys.exit("[오류] config.json 에 sender(보내는 사람)가 없습니다.")
     exclude = set(cfg.get("exclude_events", []))
     links = cfg.get("links", {})
     for eid, l in links.items():
@@ -148,7 +151,7 @@ def main():
         rows.append({"event_id": eid, "event_name": ev["event_name"], "email": email,
                      "name": p["name"], "company": p.get("company") or "", "title": p.get("title") or "",
                      "consent": p.get("consent") or "", "mail_type": "thanks",
-                     "survey_included": "Y" if include else "N", "send_by": send_by,
+                     "survey_included": "Y" if include else "N", "sender": sender, "send_by": send_by,
                      "status": "draft", "subject": subject, "body": body})
         for w in lint(subject + "\n" + body):
             warnings.append(f"{eid}/{email}: {w}")

@@ -172,10 +172,10 @@ E03·E06의 `No`(순번) 열은 무시합니다.
 
 ## DB 구성
 
-위 7개 표를 SQLite DB 하나에 넣습니다. 설계도는 [backend/db/schema.sql](../backend/db/schema.sql)입니다.
+위 7개 표와 메일 표 2개(`mail_drafts`, `mail_approvals`)를 SQLite DB 하나에 넣습니다. 설계도는 [backend/db/schema.sql](../backend/db/schema.sql)입니다.
 
 - **파일 위치**: 기본 `data/processed/ieum.db`. `.env`의 `DB_PATH`로 바꿀 수 있습니다 (`.env.example` 참고). `data/processed/`라서 GitHub에 올라가지 않습니다.
-- **표 7개** (열 이름은 위 표·CSV와 같음)
+- **데이터 표 7개** (열 이름은 위 표·CSV와 같음) + **메일 표 2개**
 
 | 표 | 기본 키 | 연결 (외래 키) |
 |---|---|---|
@@ -186,9 +186,26 @@ E03·E06의 `No`(순번) 열은 무시합니다.
 | surveys | survey_id (S001~) | event_id → events, email → customers (익명이면 빈 값) |
 | interactions | interaction_id (I001~) | event_id → events, email → customers |
 | contents | content_id (C001~) | |
+| mail_drafts | draft_id | event_id → events |
+| mail_approvals | draft_id (mail_drafts 와 같은 ID) | 없음 (일부러 걸지 않음) |
 
-- **실행 순서**: `build_profile.py` → `load.py` (명령은 [backend/README.md](../backend/README.md))
+### 메일 표
+
+- **mail_drafts** — 메일 초안. 감사 메일(`thanks`)·맞춤 메일(`custom`)·맞춤 콘텐츠(`content`)가 한 표를 같이 씁니다.
+  - 열: `draft_id`, `mail_type`, `event_id`, `email`, `name`, `company`, `title`, `sender`, `subject`, `body`, `send_by`, `body_hash`, `extra`, `created_at`
+  - **draft_id 규칙**: `"{mail_type}:{event_id 또는 content_id}:{email}"` (예: `thanks:E01:user001@co07chem.example`). 같은 메일은 다시 만들어도 같은 ID가 나옵니다.
+  - `body_hash`: 제목과 본문으로 만든 sha256 값 (`subject + "\n" + body`). 제목이나 본문이 한 글자라도 바뀌면 달라집니다.
+  - `extra`: 메일 종류별 정보를 담는 JSON 문자열. 감사 메일은 `{"survey_included": "Y", "consent": "Y"}`
+  - `created_at`: 초안을 DB에 넣은 시각 `YYYY-MM-DD HH:MM:SS`
+- **mail_approvals** — 승인 기록. 초안과 분리해 둡니다.
+  - 열: `draft_id`, `status`(`scheduled` / `sent` / `excluded`), `body_hash`(승인 당시 값), `approved_at`, `scheduled_at`, `sent_at`
+  - **승인 기록은 초안을 다시 만들어도 유지됩니다.** `load.py`는 이 표를 비우거나 다시 만들지 않고, 초안이 지워져도 기록이 남도록 외래 키를 걸지 않았습니다.
+  - 승인 당시 `body_hash`가 지금 초안의 `body_hash`와 다르면 승인 후 문안이 바뀐 것이므로 승인 무효로 봅니다 (판단은 API에서).
+
+- **실행 순서**: `build_profile.py` → `build_thanks.py` → `load.py` (명령은 [backend/README.md](../backend/README.md))
   - `load.py`는 실행할 때마다 schema.sql 적용 → 표 비우기 → CSV 다시 넣기를 한 번에 처리합니다. 중간에 실패하면 전부 되돌려 DB는 실행 전 상태 그대로 남습니다.
+  - 감사 메일 초안: `out/thanks_mails.csv`(`build_thanks.py` 결과)를 읽어 `mail_drafts`의 `mail_type='thanks'` 행만 지우고 다시 넣습니다. 다른 종류(`custom`, `content`) 행은 지우지 않습니다. 파일이 없으면 안내만 하고 기존 thanks 초안은 그대로 둔 채 나머지 표를 정상 처리합니다.
+  - `mail_approvals`는 어떤 경우에도 비우지 않습니다.
   - participation에서 테스트 행사 행(`is_test`)과 이메일 빈 행은 넣지 않고, 뺀 개수를 출력합니다.
   - CSV의 빈 값은 NULL, `True`/`False`는 1/0으로 넣습니다.
   - 외래 키는 연결할 때마다 켜야 해서 `backend/db/conn.py`의 `connect()`로 연결합니다.

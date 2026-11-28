@@ -23,6 +23,7 @@
 | `email`, `name`, `company`, `title`, `consent` | 받는 사람 (profiles.json) |
 | `mail_type` | `thanks` |
 | `survey_included` | 설문 요청 문단이 들어가면 `Y`, 현장 QR 응답자라서 요청을 빼고 응답 감사 문단을 넣었으면 `N` |
+| `sender` | 보내는 사람 (config.json `sender`) |
 | `send_by` | 발송 기한 `YYYY-MM-DD HH:MM` (행사일 + `send_by_days_after`, `send_by_time`) |
 | `status` | `draft` (본부장 확인 전) |
 | `subject`, `body` | 제목, 본문 |
@@ -32,6 +33,7 @@
 #### `backend/thanks_mail/config.json`
 ```json
 {
+  "sender": "이음러닝 마케팅본부장 한서윤 <sy.han@ieumlearning.example>",  // 보내는 사람 (비어 있으면 멈춤)
   "send_by_days_after": 1,       // 발송 기한: 행사일 며칠 뒤까지
   "send_by_time": "12:00",       // 발송 기한 시각 (HH:MM)
   "exclude_events": ["E07"],     // 감사 메일을 만들지 않을 행사

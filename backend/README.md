@@ -30,6 +30,7 @@ python backend/data/build_profile.py --no-classify  # LLM 산업군 분류 없�
 python backend/data/build_profile.py --make-test    # 테스트 명단(E07)을 다시 만들 때
 python backend/data/make_ksic.py                    # KSIC 엑셀이 바뀌었을 때만 (backend/data/ksic.json 재생성)
 python backend/db/load.py                           # build_profile.py 다음에: data/processed/*.csv → SQLite (data/processed/ieum.db)
+                                                    # out/thanks_mails.csv 가 있으면 감사 메일 초안도 넣음 (없으면 안내만, 2번 뒤 다시 실행)
 ```
 
 ### API 서버 (데이터 관리·개인 맞춤 메일·개인 맞춤 콘텐츠 화면용): `backend/app/` ← `data/processed/ieum.db`, `out/custom_mails.csv`
@@ -65,8 +66,11 @@ uvicorn backend.app.main:app --reload  # http://127.0.0.1:8000 (문서 페이지
 ### 2. 감사 메일: `backend/thanks_mail/` → `out/thanks_mails.csv`
 ```bash
 python backend/thanks_mail/build_thanks.py
+python backend/db/load.py                    # 감사 메일 초안을 DB(mail_drafts, mail_type='thanks')에 넣기
 ```
 옵션: `--config`, `--template`, `--signature`, `--out` (다른 설정·문안으로 시험할 때)
+
+`load.py`는 `mail_drafts`의 thanks 행만 지우고 다시 넣고, 승인 기록(`mail_approvals`)은 지우지 않습니다. 다른 위치의 CSV는 `--thanks-csv`로 지정합니다.
 
 ### 3. 출석자별 후속 연락 계획: `backend/pre_question/` → `out/followup_plan.csv`
 ```bash
