@@ -181,7 +181,7 @@ def load_answers(include_drafts):
 def fact_check(r, subject, body, rep, due, contact_mode, art, survey_line):
     """메일이 '그 사람이 실제로 한 일'과 '우리가 정한 약속'만 말하는지 확인 (사람이 읽기 전에 자동으로 거른다)."""
     w = []
-    surveyed = bool(survey_line) or "설문" in r.get("sales_triggers", "")
+    surveyed = bool(survey_line) or "설문" in r.get("sales_triggers", "") or bool(r.get("known_topic"))
     if "남겨 주신" in subject and not r["pre_question"] and not r.get("survey_topic"):
         w.append("사실: 제목에 '남겨 주신'인데 남긴 질문·설문이 없음")
     if "신청하시며" in body and not r["pre_question"]:
@@ -203,6 +203,8 @@ def fact_check(r, subject, body, rep, due, contact_mode, art, survey_line):
         w.append("글: 고른 글 제목이 본문에 없음")
     if body.count("감사합니다") > 1:
         w.append("문장: 감사 인사 중복")
+    if r.get("known_topic") and "회신으로 한 줄" in body:
+        w.append("되묻기: 설문에 관심 주제를 남긴 사람에게 다시 회신을 요청함")
     return w
 
 
@@ -294,6 +296,7 @@ def main(as_of_mode="send", include_drafts=False):
         sv = surveys.get((r["event_id"], r["email"]), {})
         helpful = (sv.get("q4_helpful_content") or "").strip()
         survey_line = f"설문에서 ‘{helpful}’{josa_iga(helpful)} 도움이 되었다고 남겨 주셔서 감사합니다." if helpful else ""
+        known_topic = (sv.get("q5_wanted_topic") or "").strip()  # 이미 알려준 관심사 → 다시 묻지 않음
         label = picker.label(r["pre_question"])
         ans = answers.get(label, {}) if r["pre_question"] and r["branch"] in ("SALES", "ARTICLE") else {}
         staff_why = "sensitive" if bank_all.get(label, {}).get("status") == "not_for_first_mail" else "no_basis"
@@ -303,11 +306,11 @@ def main(as_of_mode="send", include_drafts=False):
         subject, body, src, co_note = render_mail(r, art, prev_event, due, label,
                                                   same_co[(r["event_id"], r["company"])], rep, survey_line,
                                                   ans.get("text", ""), trigger_sentence(r["sales_triggers"]), staff_why, contact_mode,
-                                                  continued_from)
+                                                  continued_from, known_topic)
         if ans.get("status") == "draft":
             lvl = {"strong": "근거 충분", "partial": "근거 일부 — 보강 필요"}.get(ans.get("basis_level"), "")
             co_note = "; ".join(x for x in [co_note, f"검수 전 답변 포함({lvl}) — 승인 필요"] if x)
-        warns = lint(subject + "\n" + body) + fact_check(r, subject, body, rep, due, contact_mode, art, survey_line)
+        warns = lint(subject + "\n" + body) + fact_check({**r, "known_topic": known_topic}, subject, body, rep, due, contact_mode, art, survey_line)
         mails.append({**_base(r), "subject": subject, "body": body, "sentence_source": src,
                       "answer": ans.get("status", ""),
                       "assigned_staff": f"{rep['name']} {rep['position']} ({rep['team']})" if rep else "",

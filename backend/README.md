@@ -25,12 +25,13 @@ python backend/data/make_ksic.py                    # KSIC 엑셀이 바뀌었�
 python backend/db/load.py                           # build_profile.py 다음에: data/processed/*.csv → SQLite (data/processed/ieum.db)
 ```
 
-### API 서버 (데이터 관리 화면용): `backend/app/` ← `data/processed/ieum.db`
+### API 서버 (데이터 관리·개인 맞춤 메일 화면용): `backend/app/` ← `data/processed/ieum.db`, `out/custom_mails.csv`
 
 > **현재 로그인·접근 제한 없음. 로컬 개발·시연용이며 서버 배포 전 인증 필요.**
 
 ```bash
 python backend/db/load.py              # DB가 없거나 CSV가 바뀌었으면 먼저
+python backend/custom_mail/build_mails.py --include-drafts  # /personal-mail 용 맞춤 메일 초안 (out/custom_mails.csv)
 uvicorn backend.app.main:app --reload  # http://127.0.0.1:8000 (문서 페이지: /docs)
 ```
 읽기(GET) 주소만 있고, 응답 필드는 화면 타입과 같은 camelCase입니다.
@@ -44,8 +45,9 @@ uvicorn backend.app.main:app --reload  # http://127.0.0.1:8000 (문서 페이지
 | `/surveys` | 설문 응답 (행사명, 고객 연결 상태 포함) |
 | `/interactions` | 후속 연락 기록 (행사명 포함) |
 | `/contents` | 발행 글 |
+| `/personal-mail` | 개인 맞춤 메일 화면: 행사별 받는 사람(맞춤 메일 대상만), AI 초안, 갈래·약속·승인 방식. DB가 아니라 `out/custom_mails.csv`를 읽음 (`backend/app/personal_mail.py`) |
 
-설정은 루트 `.env`의 `DB_PATH`(DB 위치), `CORS_ORIGINS`(허용할 화면 주소, 기본 `http://localhost:3000`)입니다. `.env.example` 참고.
+설정은 루트 `.env`의 `DB_PATH`(DB 위치), `CORS_ORIGINS`(허용할 화면 주소, 기본 `http://localhost:3000`, `http://127.0.0.1:3000`)입니다. `.env.example` 참고.
 
 ### 2. 감사 메일: `backend/thanks_mail/` → `out/thanks_mails.csv`
 ```bash
