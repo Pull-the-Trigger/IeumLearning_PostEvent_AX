@@ -74,8 +74,10 @@ def events():
 def customers():
     rows = query("""
         WITH counts AS (
-            SELECT email, COUNT(*) AS applied, SUM(attended = 'Y') AS attended
-            FROM participation GROUP BY email
+            SELECT p.email, COUNT(*) AS applied, SUM(p.attended = 'Y') AS attended
+            FROM participation p
+            JOIN events e ON e.event_id = p.event_id   -- DB에 등록된 행사 기준
+            GROUP BY p.email
         )
         SELECT c.email AS id, c.name, c.company, c.title, c.email,
                COALESCE(n.attended, 0) > 0 AS attended,
@@ -83,7 +85,7 @@ def customers():
                COALESCE(n.attended, 0) AS attendanceCount,
                EXISTS (SELECT 1 FROM surveys s WHERE s.email = c.email) AS surveyResponded,
                co.industry_mid AS industry,
-               c.title AS role,
+               CASE WHEN COALESCE(n.attended, 0) >= 2 THEN 'Y' ELSE 'N' END AS existingCustomer,
                c.first_event_id AS firstEventId, c.last_event_id AS lastEventId,
                COALESCE(n.applied, 0) AS appliedCount,
                COALESCE(n.attended, 0) AS attendedCount
@@ -92,6 +94,18 @@ def customers():
         LEFT JOIN counts n ON n.email = c.email
         ORDER BY c.email
     """)
+    # 설문 Q5(듣고 싶은 주제): 고객별로 최근 응답 순, 중복 제거
+    topics = {}
+    for t in query("""
+        SELECT email, TRIM(q5_wanted_topic) AS topic FROM surveys
+        WHERE email IS NOT NULL AND TRIM(COALESCE(q5_wanted_topic, '')) <> ''
+        ORDER BY response_date DESC, survey_id DESC
+    """):
+        seen = topics.setdefault(t["email"], [])
+        if t["topic"] not in seen:
+            seen.append(t["topic"])
+    for r in rows:
+        r["interests"] = ", ".join(topics.get(r["email"], []))
     return to_bool(rows, "attended", "surveyResponded")
 
 
